@@ -242,6 +242,55 @@
   .blank-input.ok { border-color: var(--success); background: #eafaf1; color: var(--success); }
   .blank-input.no { border-color: var(--danger); background: #fdecea; color: var(--danger); }
   .blank-answer { min-height: 18px; font-size: 12px; line-height: 18px; color: var(--danger); font-weight: 700; }
+
+  /* ---------- 移动端适配 ---------- */
+  @media (max-width: 520px) {
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+    body { padding: 16px 10px; }
+    h1 { font-size: 20px; margin-bottom: 14px; }
+
+    .card { padding: 16px 14px; border-radius: 12px; margin-bottom: 12px; }
+
+    /* 顶部 6 个标签：改成横向滑动，不再挤成一团 */
+    .tabs {
+      flex-wrap: nowrap; overflow-x: auto; gap: 6px;
+      padding: 4px; margin-bottom: 14px;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab {
+      flex: 0 0 auto; padding: 9px 13px; font-size: 14px;
+      white-space: nowrap;
+    }
+
+    /* 输入框字号提到 16px，避免 iOS 聚焦时页面自动放大 */
+    input, textarea, select { font-size: 16px; }
+    .select-trigger { font-size: 16px; }
+    textarea { min-height: 80px; }
+
+    .stats { gap: 8px; margin-bottom: 12px; }
+    .stat { padding: 12px 8px; }
+    .stat .num { font-size: 20px; }
+    .stat .lbl { font-size: 11px; }
+
+    /* “下拉 + 按钮”那种并排行，窄屏改成上下排列 */
+    .row { flex-direction: column; gap: 8px; }
+
+    .quiz-chinese { font-size: 24px; padding: 20px 0; }
+    .sentence-zh { font-size: 19px; }
+
+    .btn { padding: 12px 18px; font-size: 15px; }
+
+    .word-item { gap: 8px; }
+    .word-del { font-size: 18px; padding: 6px 10px; }
+
+    /* 工具栏允许换行，避免窄屏被撑开 */
+    .list-toolbar, .letter-toolbar, .history-toolbar { flex-wrap: wrap; gap: 8px; }
+    .history-day-head { flex-wrap: wrap; }
+
+    .toast { bottom: 20px; }
+  }
 </style>
 </head>
 <body>
