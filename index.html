@@ -1,0 +1,1581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>背单词小工具</title>
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --card: #ffffff;
+    --primary: #4f6ef7;
+    --primary-dark: #3a55d8;
+    --success: #2ecc71;
+    --danger: #e74c3c;
+    --text: #2c3e50;
+    --muted: #8892a6;
+    --border: #e4e8f0;
+    --shadow: 0 2px 12px rgba(0,0,0,0.06);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 24px 16px;
+  }
+  .container { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 22px; text-align: center; margin-bottom: 20px; }
+
+  .tabs {
+    display: flex; gap: 8px; margin-bottom: 20px;
+    background: #e8ecf5; padding: 5px; border-radius: 12px;
+  }
+  .tab {
+    flex: 1; text-align: center; padding: 10px; border: none;
+    background: transparent; border-radius: 9px; cursor: pointer;
+    font-size: 15px; color: var(--muted); font-weight: 600;
+    transition: all .15s;
+  }
+  .tab.active { background: var(--card); color: var(--primary); box-shadow: var(--shadow); }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card {
+    background: var(--card); border-radius: 14px;
+    padding: 20px; box-shadow: var(--shadow); margin-bottom: 16px;
+  }
+  .card h2 { font-size: 16px; margin-bottom: 14px; }
+
+  label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 6px; }
+  input, textarea, select {
+    width: 100%; padding: 11px 14px; border: 1.5px solid var(--border);
+    border-radius: 9px; font-size: 15px; font-family: inherit;
+    transition: border .15s; outline: none; background: #fff;
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--primary); }
+  textarea { resize: vertical; min-height: 90px; line-height: 1.6; }
+  .row { display: flex; gap: 10px; }
+  .row > * { flex: 1; }
+
+  /* 词性下拉多选框 */
+  .select-wrap { position: relative; }
+  .select-trigger {
+    width: 100%; display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; padding: 11px 14px; border: 1.5px solid var(--border);
+    border-radius: 9px; font-size: 15px; font-family: inherit; background: #fff;
+    color: var(--text); cursor: pointer; text-align: left; outline: none;
+    transition: border .15s;
+  }
+  .select-trigger:hover, .select-trigger.open { border-color: var(--primary); }
+  .select-trigger-text { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .select-arrow { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+  .select-menu {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 50;
+    background: #fff; border: 1px solid var(--border); border-radius: 9px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12); padding: 6px;
+    max-height: 240px; overflow-y: auto;
+  }
+  .select-option {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    border-radius: 7px; font-size: 14px; color: var(--text); cursor: pointer; margin: 0;
+  }
+  .select-option:hover { background: #f2f5fb; }
+  .select-option input[type="checkbox"] {
+    width: 16px; height: 16px; padding: 0; margin: 0;
+    border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer; flex-shrink: 0;
+  }
+
+  .meaning-row { margin-top: 12px; }
+
+  .btn {
+    padding: 11px 20px; border: none; border-radius: 9px;
+    cursor: pointer; font-size: 15px; font-weight: 600;
+    transition: all .15s; font-family: inherit;
+  }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary:hover { background: var(--primary-dark); }
+  .btn-block { width: 100%; margin-top: 12px; }
+  .btn-ghost { background: #eef1f8; color: var(--text); }
+  .btn-ghost:hover { background: #e2e7f2; }
+  .btn-danger { background: #fdecea; color: var(--danger); }
+  .btn-danger:hover { background: #fbdad7; }
+
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+  .stats { display: flex; gap: 10px; margin-bottom: 16px; }
+  .stat {
+    flex: 1; background: var(--card); border-radius: 12px;
+    padding: 14px; text-align: center; box-shadow: var(--shadow);
+  }
+  .stat .num { font-size: 24px; font-weight: 700; color: var(--primary); }
+  .stat .lbl { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+  /* 单词列表 */
+  .word-list { list-style: none; }
+  .word-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 4px; border-bottom: 1px solid var(--border);
+  }
+  .word-item:last-child { border-bottom: none; }
+  .word-main { flex: 1; }
+  .word-check { width: 17px; height: 17px; cursor: pointer; flex-shrink: 0; }
+  .word-en { font-weight: 600; font-size: 15px; }
+  .word-zh { color: var(--muted); font-size: 14px; }
+  .word-meta { color: #aab2c5; font-size: 12px; margin-top: 3px; }
+  .pos-badge {
+    display: inline-block; font-size: 12px; font-weight: 600;
+    color: var(--primary); background: #eef1fb;
+    border-radius: 6px; padding: 2px 8px; vertical-align: middle;
+  }
+  .word-del { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 14px; }
+  .list-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 4px 12px; font-size: 13px; color: var(--muted);
+  }
+  .list-toolbar label { display: flex; align-items: center; gap: 6px; cursor: pointer; margin: 0; }
+
+  /* 单词本按首字母分组 */
+  .letter-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 4px 10px; font-size: 13px; color: var(--muted);
+  }
+  .letter-group { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+  .letter-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; background: #f2f5fb; cursor: pointer; user-select: none;
+  }
+  .letter-head:hover { background: #e8edf8; }
+  .letter { font-weight: 700; font-size: 16px; color: var(--primary); min-width: 20px; }
+  .letter-count { font-size: 12.5px; color: var(--muted); flex: 1; }
+  .letter-toggle { flex-shrink: 0; color: var(--muted); font-size: 13px; transition: transform .18s; }
+  .letter-group.collapsed .letter-toggle { transform: rotate(-90deg); }
+  .letter-group.collapsed .word-list { display: none; }
+
+  /* 搜索框 */
+  .search-box { position: relative; margin-bottom: 14px; }
+  .search-box .search-icon {
+    position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    font-size: 15px; color: var(--muted); pointer-events: none;
+  }
+  .search-box input { padding-left: 38px; padding-right: 34px; }
+  .search-clear {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    width: 22px; height: 22px; border: none; border-radius: 50%;
+    background: #e8ecf5; color: var(--muted); font-size: 12px;
+    cursor: pointer; line-height: 22px; text-align: center; padding: 0;
+    display: none;
+  }
+  .search-clear.show { display: block; }
+  .search-clear:hover { background: #dfe4ef; color: var(--text); }
+
+  /* 测试 */
+  .quiz-chinese { font-size: 30px; font-weight: 700; text-align: center; padding: 30px 0; }
+  .quiz-progress { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 6px; }
+  .feedback { text-align: center; margin-top: 14px; font-size: 15px; font-weight: 600; min-height: 22px; }
+  .feedback.ok { color: var(--success); }
+  .feedback.no { color: var(--danger); }
+  .quiz-answer { text-align: center; font-size: 14px; color: var(--muted); margin-top: 6px; }
+  .quiz-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .quiz-actions .btn { flex: 1; }
+
+  .empty { text-align: center; color: var(--muted); padding: 30px 0; font-size: 14px; }
+  .toast {
+    position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%);
+    background: #2c3e50; color: #fff; padding: 11px 20px;
+    border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none;
+    transition: opacity .3s; z-index: 999; max-width: 90vw;
+  }
+  .toast.show { opacity: 1; }
+
+  /* 日期记录 */
+  .history-day { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+  .history-day-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 12px 16px; background: #f2f5fb;
+  }
+  .history-date { font-weight: 700; font-size: 15px; color: var(--text); }
+  .history-stats { font-size: 12.5px; color: var(--muted); }
+  .history-words { list-style: none; }
+  .history-word {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; border-top: 1px solid var(--border);
+  }
+  .wrong-tag {
+    flex-shrink: 0; font-size: 11px; font-weight: 700; color: #fff;
+    background: var(--danger); border-radius: 6px; padding: 2px 8px;
+  }
+  .history-day-foot { padding: 10px 16px; border-top: 1px solid var(--border); text-align: right; }
+  .btn-sm { padding: 7px 14px; font-size: 13px; }
+  .history-day-head { cursor: pointer; user-select: none; }
+  .history-day-head:hover { background: #e8edf8; }
+  .history-toggle { flex-shrink: 0; color: var(--muted); font-size: 13px; transition: transform .18s; }
+  .history-day.collapsed .history-toggle { transform: rotate(-90deg); }
+  .history-day.collapsed .history-words,
+  .history-day.collapsed .history-day-foot { display: none; }
+  .history-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
+
+  /* 句子背诵 */
+  .sentence-zh { font-size: 22px; font-weight: 700; text-align: center; padding: 16px 0 6px; line-height: 1.5; }
+  .sentence-blanks {
+    display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: flex-start;
+    justify-content: center; padding: 16px 4px; line-height: 1.5;
+  }
+  .sblk { display: inline-flex; flex-direction: column; align-items: center; }
+  .sline { display: inline-flex; align-items: baseline; }
+  .sblk .pre, .sblk .post { color: var(--text); font-size: 18px; font-weight: 600; }
+  .sblk-text { color: var(--muted); font-size: 18px; }
+  .blank-input {
+    width: 3.2em; min-width: 2.4em; text-align: center;
+    padding: 5px 6px; font-size: 17px; font-weight: 600;
+    border: 1.5px solid var(--border); border-radius: 7px;
+    font-family: inherit; background: #fff; color: var(--text);
+    transition: all .12s; outline: none;
+  }
+  .blank-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,110,247,.12); }
+  .blank-input.ok { border-color: var(--success); background: #eafaf1; color: var(--success); }
+  .blank-input.no { border-color: var(--danger); background: #fdecea; color: var(--danger); }
+  .blank-answer { min-height: 18px; font-size: 12px; line-height: 18px; color: var(--danger); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📖 背单词小工具</h1>
+  <div class="sync-bar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+    <span id="sync-status" style="font-size:13px;color:#888;">☁️ 未设置同步</span>
+    <button class="btn btn-ghost" id="btn-sync">设置云同步</button>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-panel="add">➕ 记录单词</button>
+    <button class="tab" data-panel="list">📋 单词本</button>
+    <button class="tab" data-panel="quiz">🧠 背诵测试</button>
+    <button class="tab" data-panel="history">📅 日期记录</button>
+    <button class="tab" data-panel="sent">📝 句子</button>
+    <button class="tab" data-panel="sentquiz">✍️ 句子测试</button>
+  </div>
+
+  <!-- 记录单词 -->
+  <div class="panel active" id="panel-add">
+    <div class="card">
+      <h2>单个添加</h2>
+      <div><label>英文单词</label><input id="word-en"></div>
+      <div style="margin-top: 12px;">
+        <label>词性（可多选，不选 = 未标注）</label>
+        <div id="word-pos" class="select-wrap"></div>
+      </div>
+      <div id="meaning-boxes"></div>
+      <button class="btn btn-primary btn-block" id="btn-add">添加单词</button>
+    </div>
+
+    <div class="card">
+      <h2>批量导入（一行一个）</h2>
+      <textarea id="bulk" placeholder="英文 中文 词性（每行一个）"></textarea>
+      <button class="btn btn-ghost btn-block" id="btn-bulk">批量导入</button>
+      <p class="hint">每行一条，格式：<code>英文 中文 [词性]</code>（词性可省略）。同一英文的不同词性可分别一行，会自动合并；一行内多个词性用逗号分隔。例如「close 关闭 动词」、「close 近的 形容词」、「run 跑 动词,名词」。</p>
+    </div>
+  </div>
+
+  <!-- 单词本 -->
+  <div class="panel" id="panel-list">
+    <div class="stats">
+      <div class="stat"><div class="num" id="stat-total">0</div><div class="lbl">总单词数</div></div>
+      <div class="stat"><div class="num" id="stat-quiz">0</div><div class="lbl">总背诵次数</div></div>
+      <div class="stat"><div class="num" id="stat-rate">—</div><div class="lbl">总正确率</div></div>
+    </div>
+    <div class="card">
+      <h2>我的单词本</h2>
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input id="search-input" placeholder="搜索英文 / 中文释义…" autocomplete="off">
+        <button id="search-clear" class="search-clear" title="清空">✕</button>
+      </div>
+      <div id="word-list-wrap"></div>
+      <div class="quiz-actions">
+        <button class="btn btn-ghost" id="btn-import">导入数据</button>
+        <button class="btn btn-ghost" id="btn-export">导出</button>
+      </div>
+      <div class="quiz-actions">
+        <button class="btn btn-ghost" id="btn-pack">下载完整版（含数据）</button>
+        <button class="btn btn-danger" id="btn-clear">删除选中</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 背诵测试 -->
+  <div class="panel" id="panel-quiz">
+    <div class="card">
+      <h2>回顾错词</h2>
+      <div class="row">
+        <select id="review-date"></select>
+        <button class="btn btn-primary" id="btn-review">回顾该日错词</button>
+      </div>
+      <p class="hint" id="review-hint">选择日期，只复习当天背错的单词。</p>
+    </div>
+    <div class="card">
+      <h2>词性筛选</h2>
+      <div id="quiz-pos-filter" class="select-wrap"></div>
+      <p class="hint">不勾选 = 全部词性；勾选一个或多个后，只抽对应词性的释义。</p>
+    </div>
+    <div class="card">
+      <div class="quiz-progress" id="quiz-progress"></div>
+      <div class="quiz-chinese" id="quiz-chinese">加载中…</div>
+      <input id="quiz-input" placeholder="输入对应的英文单词" autocomplete="off">
+      <div class="feedback" id="quiz-feedback"></div>
+      <div class="quiz-answer" id="quiz-answer"></div>
+      <div class="quiz-actions">
+        <button class="btn btn-primary" id="btn-check">检查</button>
+        <button class="btn btn-ghost" id="btn-skip">不会 / 跳过</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 日期记录 -->
+  <div class="panel" id="panel-history">
+    <div class="card">
+      <h2>每日背诵记录</h2>
+      <p class="hint">按日期查看当天背了哪些单词、哪些背错了，可一键回顾当天错词。</p>
+      <div id="history-wrap"></div>
+    </div>
+  </div>
+
+  <!-- 句子 -->
+  <div class="panel" id="panel-sent">
+    <div class="card">
+      <h2>添加句子</h2>
+      <div><label>英文句子</label><input id="sent-en" placeholder="例如：The weather is nice today."></div>
+      <div style="margin-top: 12px;"><label>中文翻译</label><input id="sent-zh-input" placeholder="例如：今天天气很好。"></div>
+      <button class="btn btn-primary btn-block" id="btn-sent-add">添加句子</button>
+    </div>
+    <div class="card">
+      <h2>批量导入句子（一行一个）</h2>
+      <textarea id="sent-bulk" placeholder="英文句子 ||| 中文翻译（每行一个）"></textarea>
+      <button class="btn btn-ghost btn-block" id="btn-sent-bulk">批量导入</button>
+      <p class="hint">每行一条，用 <code>|||</code> 分隔英文和中文。例如：<code>The weather is nice today. ||| 今天天气很好。</code></p>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="num" id="sent-stat-total">0</div><div class="lbl">总句子数</div></div>
+    </div>
+    <div class="card">
+      <h2>我的句子本</h2>
+      <div id="sent-list-wrap"></div>
+      <div class="quiz-actions">
+        <button class="btn btn-ghost" id="btn-sent-export">导出句子</button>
+        <button class="btn btn-danger" id="btn-sent-clear">清空句子本</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 句子测试 -->
+  <div class="panel" id="panel-sentquiz">
+    <div class="card">
+      <div class="quiz-progress" id="sent-progress"></div>
+      <div class="sentence-zh" id="sent-zh">加载中…</div>
+      <p class="hint" style="text-align:center;">根据中文翻译，在空格中填入每个英文单词</p>
+      <div class="sentence-blanks" id="sentence-blanks"></div>
+      <div class="feedback" id="sent-feedback"></div>
+      <div class="quiz-actions">
+        <button class="btn btn-primary" id="btn-sent-check">检查</button>
+        <button class="btn btn-ghost" id="btn-sent-skip">不会 / 跳过</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+(function () {
+  const KEY = 'vocab_words_v1';
+  const EMBEDDED_DATA = null; // 【数据注入点】下载完整版时会被替换为实际单词数据
+
+  const EMBEDDED_SENTENCES = null; // 【句子数据注入点】下载完整版时会被替换为实际句子数据
+
+  // 首次打开且本地无数据时，用内嵌数据初始化
+  if (EMBEDDED_DATA && !localStorage.getItem(KEY)) {
+    localStorage.setItem(KEY, JSON.stringify(EMBEDDED_DATA));
+  }
+
+  // ---------- 数据 ----------
+  function load() {
+    try {
+      const words = JSON.parse(localStorage.getItem(KEY)) || [];
+      return words.map(w => {
+        let meanings;
+        if (Array.isArray(w.meanings) && w.meanings.length) {
+          meanings = w.meanings
+            .map(m => ({ pos: normalizePos(m.pos), zh: String(m.zh || '').trim() }))
+            .filter(m => m.zh);
+        } else {
+          // 兼容旧数据：pos（字符串或数组）+ zh（字符串）
+          const zh = String(w.zh || '').trim();
+          const posArr = toPosArray(w.pos);
+          meanings = (posArr.length ? posArr : [''])
+            .map(p => ({ pos: p, zh }))
+            .filter(m => m.zh);
+        }
+        return {
+          en: w.en,
+          meanings,
+          addCount: w.addCount || 1,
+          quizCount: w.quizCount || 0,
+          wrongCount: w.wrongCount || 0
+        };
+      });
+    }
+    catch (e) { return []; }
+  }
+  function save(words) { localStorage.setItem(KEY, JSON.stringify(words)); schedulePush(); }
+  function normalize(s) { return s.trim().toLowerCase().replace(/\s+/g, ' '); }
+  const POS_LIST = ['名词', '动词', '形容词', '副词', '介词', '连词', '代词', '数词', '冠词', '其他'];
+  const POS_ALIAS = {
+    'n': '名词', 'n.': '名词', 'noun': '名词',
+    'v': '动词', 'v.': '动词', 'verb': '动词', 'vt': '动词', 'vi': '动词',
+    'adj': '形容词', 'adj.': '形容词', 'adjective': '形容词',
+    'adv': '副词', 'adv.': '副词', 'adverb': '副词',
+    'prep': '介词', 'prep.': '介词',
+    'conj': '连词', 'conj.': '连词',
+    'pron': '代词', 'pron.': '代词',
+    'num': '数词', 'art': '冠词', 'article': '冠词'
+  };
+  function normalizePos(p) {
+    if (!p) return '';
+    const s = String(p).trim();
+    return POS_ALIAS[s.toLowerCase()] || s;
+  }
+  function toPosArray(pos) {
+    let arr;
+    if (Array.isArray(pos)) arr = pos;
+    else if (typeof pos === 'string' && pos.trim()) arr = pos.split(/[\s,，、/|]+/);
+    else return [];
+    const out = [], seen = new Set();
+    for (const x of arr) {
+      const p = normalizePos(x);
+      if (p && !seen.has(p)) { seen.add(p); out.push(p); }
+    }
+    return out;
+  }
+  const POS_FULL = {
+    '名词': '名词 n.', '动词': '动词 v.', '形容词': '形容词 adj.',
+    '副词': '副词 adv.', '介词': '介词 prep.', '连词': '连词 conj.',
+    '代词': '代词 pron.', '数词': '数词 num.', '冠词': '冠词 art.', '其他': '其他'
+  };
+  function posLabel(p) {
+    return POS_FULL[p] || p;
+  }
+  function rateOf(w) {
+    const q = w.quizCount || 0;
+    if (!q) return '—';
+    const wrong = w.wrongCount || 0;
+    return Math.round((q - wrong) / q * 100) + '%';
+  }
+  // ---------- 每日背诵日志 ----------
+  const DAILY_KEY = 'vocab_daily_v1';
+  function today() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+  function loadDaily() {
+    try {
+      const d = JSON.parse(localStorage.getItem(DAILY_KEY)) || {};
+      return (d && typeof d === 'object' && !Array.isArray(d)) ? d : {};
+    } catch (e) { return {}; }
+  }
+  function saveDaily(daily) { localStorage.setItem(DAILY_KEY, JSON.stringify(daily)); schedulePush(); }
+  function wkey(en, zh) { return normalize(en) + '|' + normalize(zh); }
+
+  function recordQuiz(w, correct) {
+    const words = load();
+    const item = words.find(x => normalize(x.en) === normalize(w.en) && x.meanings.some(m => normalize(m.zh) === normalize(w.zh)));
+    if (item) {
+      item.quizCount = (item.quizCount || 0) + 1;
+      if (!correct) item.wrongCount = (item.wrongCount || 0) + 1;
+      save(words);
+    }
+    // 记录每日日志
+    const daily = loadDaily();
+    const d = today();
+    if (!daily[d]) daily[d] = {};
+    const k = wkey(w.en, w.zh);
+    if (!daily[d][k]) daily[d][k] = { en: w.en, zh: w.zh, pos: w.pos || '', quiz: 0, wrong: 0 };
+    daily[d][k].quiz = (daily[d][k].quiz || 0) + 1;
+    if (!correct) daily[d][k].wrong = (daily[d][k].wrong || 0) + 1;
+    saveDaily(daily);
+  }
+
+  // ---------- 词性下拉多选框 ----------
+  function createPosDropdown(container, opts) {
+    const trigger = document.createElement('button');
+    trigger.type = 'button';
+    trigger.className = 'select-trigger';
+    const triggerText = document.createElement('span');
+    triggerText.className = 'select-trigger-text';
+    trigger.appendChild(triggerText);
+    const arrow = document.createElement('span');
+    arrow.className = 'select-arrow';
+    arrow.textContent = '▾';
+    trigger.appendChild(arrow);
+
+    const menu = document.createElement('div');
+    menu.className = 'select-menu';
+    menu.style.display = 'none';
+
+    const items = POS_LIST.map(p => ({ value: p, label: posLabel(p) }));
+    if (opts.includeNone) items.push({ value: '__none__', label: '未标注' });
+
+    const boxes = items.map(it => {
+      const label = document.createElement('label');
+      label.className = 'select-option';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = it.value;
+      label.appendChild(cb);
+      label.appendChild(document.createTextNode(' ' + it.label));
+      menu.appendChild(label);
+      return { cb, it };
+    });
+
+    container.appendChild(trigger);
+    container.appendChild(menu);
+
+    function getValues() {
+      return boxes.filter(b => b.cb.checked).map(b => b.cb.value);
+    }
+    function updateText() {
+      const labs = boxes.filter(b => b.cb.checked).map(b => b.it.label);
+      triggerText.textContent = labs.length ? labs.join('、') : (opts.placeholder || '未标注');
+    }
+    function open() { menu.style.display = 'block'; trigger.classList.add('open'); }
+    function close() { menu.style.display = 'none'; trigger.classList.remove('open'); }
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu.style.display === 'block' ? close() : open();
+    });
+    menu.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', close);
+
+    boxes.forEach(b => b.cb.addEventListener('change', () => {
+      updateText();
+      if (opts.onchange) opts.onchange(getValues());
+    }));
+
+    updateText();
+    return { getValues, clear: () => { boxes.forEach(b => b.cb.checked = false); updateText(); } };
+  }
+
+  // ---------- 视图切换 ----------
+  const tabs = document.querySelectorAll('.tab');
+  const panels = { add: 'panel-add', list: 'panel-list', quiz: 'panel-quiz', history: 'panel-history', sent: 'panel-sent', sentquiz: 'panel-sentquiz' };
+  function switchPanel(key) {
+    tabs.forEach(x => x.classList.remove('active'));
+    tabs.forEach(t => { if (t.dataset.panel === key) t.classList.add('active'); });
+    Object.values(panels).forEach(id => document.getElementById(id).classList.remove('active'));
+    document.getElementById(panels[key]).classList.add('active');
+  }
+  tabs.forEach(t => t.addEventListener('click', () => {
+    const key = t.dataset.panel;
+    switchPanel(key);
+    if (key === 'list') renderList();
+    if (key === 'quiz') { renderReviewSelect(); startQuiz(); }
+    if (key === 'history') renderHistory();
+    if (key === 'sent') renderSentList();
+    if (key === 'sentquiz') startSentenceQuiz();
+  }));
+
+  // ---------- 添加单词 ----------
+  // 每个词性对应一个中文释义输入框；未标注词性用 '' 键
+  const meaningValues = {};
+
+  function addWord(en, meanings) {
+    const words = load();
+    const e = normalize(en);
+    if (!e) return { ok: false, msg: '英文不能为空' };
+    const ms = meanings
+      .map(m => ({ pos: normalizePos(m.pos), zh: String(m.zh || '').trim() }))
+      .filter(m => m.zh);
+    if (!ms.length) return { ok: false, msg: '请至少填写一个中文释义' };
+    const exist = words.find(w => normalize(w.en) === e);
+    if (exist) {
+      let added = 0, dup = 0;
+      ms.forEach(m => {
+        const found = exist.meanings.some(x => x.pos === m.pos && x.zh === m.zh);
+        if (found) { dup++; exist.addCount = (exist.addCount || 0) + 1; }
+        else { exist.meanings.push(m); added++; }
+      });
+      save(words);
+      return { ok: true, added, dup };
+    }
+    words.push({ en: e, meanings: ms, addCount: 1, quizCount: 0, wrongCount: 0 });
+    save(words);
+    return { ok: true, added: ms.length, dup: 0 };
+  }
+
+  function renderMeaningBoxes() {
+    const wrap = document.getElementById('meaning-boxes');
+    const sel = addPosSelect.getValues();
+    const keys = sel.length ? sel : [''];
+    wrap.innerHTML = keys.map(k =>
+      `<div class="meaning-row">
+        <label>${k ? escapeHtml(k) + ' 的中文释义' : '中文释义'}</label>
+        <input class="meaning-input" data-pos="${escapeHtml(k)}" placeholder="请输入中文释义" value="${escapeHtml(meaningValues[k] || '')}">
+      </div>`
+    ).join('');
+    wrap.querySelectorAll('.meaning-input').forEach(inp => {
+      inp.addEventListener('input', () => { meaningValues[inp.dataset.pos] = inp.value; });
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          const inputs = Array.from(document.querySelectorAll('#meaning-boxes .meaning-input'));
+          const idx = inputs.indexOf(inp);
+          if (idx >= 0 && idx < inputs.length - 1) inputs[idx + 1].focus();
+          else document.getElementById('btn-add').click();
+        }
+      });
+    });
+  }
+
+  document.getElementById('btn-add').addEventListener('click', () => {
+    const en = document.getElementById('word-en').value;
+    const sel = addPosSelect.getValues();
+    const ms = (sel.length ? sel : ['']).map(p => ({ pos: p, zh: meaningValues[p] || '' }));
+    const r = addWord(en, ms);
+    if (r.ok) {
+      document.getElementById('word-en').value = '';
+      for (const k in meaningValues) delete meaningValues[k];
+      addPosSelect.clear();
+      renderMeaningBoxes();
+      document.getElementById('word-en').focus();
+      let msg;
+      if (r.added > 0 && r.dup > 0) msg = `已添加：新增 ${r.added} 个释义，${r.dup} 个已存在 ✓`;
+      else if (r.added > 0) msg = '已添加 ✓';
+      else msg = '该词已录入，录入次数 +1 ✓';
+      flash(msg, 'ok');
+    } else {
+      flash(r.msg, 'no');
+    }
+  });
+
+  document.getElementById('word-en').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const first = document.querySelector('#meaning-boxes .meaning-input');
+      if (first) first.focus();
+    }
+  });
+
+  function importText(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    let added = 0, dup = 0, skipped = 0;
+    lines.forEach(line => {
+      let en, zh, poss = [''];
+      const m3 = line.match(/^(.+?)[\s,，、\t]+(.+?)[\s,，、\t]+(.+)$/);
+      if (m3) {
+        const tokens = m3[3].split(/[\s,，、/|]+/).map(normalizePos).filter(Boolean);
+        if (tokens.length && tokens.every(t => POS_LIST.includes(t))) {
+          en = m3[1]; zh = m3[2]; poss = tokens;
+        } else {
+          const m2 = line.match(/^(.+?)[\s,，、\t]+(.+)$/);
+          if (!m2) { skipped++; return; }
+          en = m2[1]; zh = m2[2];
+        }
+      } else {
+        const m2 = line.match(/^(.+?)[\s,，、\t]+(.+)$/);
+        if (!m2) { skipped++; return; }
+        en = m2[1]; zh = m2[2];
+      }
+      poss.forEach(p => {
+        const r = addWord(en, [{ pos: p, zh }]);
+        if (!r.ok) skipped++;
+        else { added += r.added; dup += r.dup; }
+      });
+    });
+    return { added, dup, skipped };
+  }
+
+  document.getElementById('btn-bulk').addEventListener('click', () => {
+    const text = document.getElementById('bulk').value;
+    const r = importText(text);
+    document.getElementById('bulk').value = '';
+    flash(`导入完成：新增 ${r.added} 个释义，重复 ${r.dup} 次，跳过 ${r.skipped} 个`, (r.added + r.dup) > 0 ? 'ok' : 'no');
+    renderStats();
+  });
+
+  function flash(msg, type) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.style.background = type === 'ok' ? '#2ecc71' : '#e74c3c';
+    el.classList.add('show');
+    clearTimeout(flash._t);
+    flash._t = setTimeout(() => el.classList.remove('show'), 2200);
+  }
+
+  // ---------- 单词本 ----------
+  function renderStats() {
+    const words = load();
+    document.getElementById('stat-total').textContent = words.length;
+    const totalQuiz = words.reduce((s, w) => s + (w.quizCount || 0), 0);
+    const totalWrong = words.reduce((s, w) => s + (w.wrongCount || 0), 0);
+    document.getElementById('stat-quiz').textContent = totalQuiz;
+    document.getElementById('stat-rate').textContent = totalQuiz ? Math.round((totalQuiz - totalWrong) / totalQuiz * 100) + '%' : '—';
+  }
+  function renderList() {
+    renderStats();
+    const words = load();
+    const wrap = document.getElementById('word-list-wrap');
+    const q = (document.getElementById('search-input').value || '').trim().toLowerCase();
+
+    if (!words.length) {
+      wrap.innerHTML = '<div class="empty">还没有单词，先去“记录单词”添加吧</div>';
+      return;
+    }
+
+    // 搜索过滤：匹配英文、中文释义或词性
+    const items = q
+      ? words.map((w, i) => ({ w, i })).filter(({ w }) =>
+          w.en.toLowerCase().includes(q) ||
+          w.meanings.some(m => m.zh.toLowerCase().includes(q) ||
+            (m.pos && posLabel(m.pos).toLowerCase().includes(q)))
+        )
+      : words.map((w, i) => ({ w, i }));
+
+    if (!items.length) {
+      wrap.innerHTML = '<div class="empty">没有匹配“' + escapeHtml(q) + '”的单词</div>';
+      return;
+    }
+
+    // 按字母顺序排行，并按首字母分组
+    items.sort((a, b) => a.w.en.localeCompare(b.w.en, 'en'));
+    const groups = [];
+    items.forEach(({ w, i }) => {
+      const letter = /^[a-z]/i.test(w.en) ? w.en[0].toUpperCase() : '#';
+      if (!groups.length || groups[groups.length - 1].letter !== letter) {
+        groups.push({ letter, list: [] });
+      }
+      groups[groups.length - 1].list.push({ w, i });
+    });
+
+    const wordLi = ({ w, i }) =>
+      `<li class="word-item">
+        <input type="checkbox" class="word-check" data-i="${i}">
+        <div class="word-main">
+          <div class="word-en">${escapeHtml(w.en)}</div>
+          <div class="word-zh">${w.meanings.map(m => (m.pos ? `<span class="pos-badge">${escapeHtml(posLabel(m.pos))}</span> ` : '') + escapeHtml(m.zh)).join('；')}</div>
+          <div class="word-meta">录入 ${w.addCount || 0} 次 · 背诵 ${w.quizCount || 0} 次 · 错误 ${w.wrongCount || 0} 次 · 正确率 ${rateOf(w)}</div>
+        </div>
+        <button class="word-del" data-i="${i}">删除</button>
+      </li>`;
+
+    wrap.innerHTML =
+      '<div class="list-toolbar">' +
+        '<label><input type="checkbox" id="select-all"> 全选</label>' +
+        '<span id="selected-count">已选 0 个</span>' +
+      '</div>' +
+      '<div class="letter-toolbar">' +
+        '<span>按首字母排序 · 点击字母展开/收起</span>' +
+        '<span>' +
+          '<button class="btn btn-ghost btn-sm" id="list-expand">全部展开</button> ' +
+          '<button class="btn btn-ghost btn-sm" id="list-collapse">全部收起</button>' +
+        '</span>' +
+      '</div>' +
+      groups.map(g =>
+        `<div class="letter-group collapsed">
+          <div class="letter-head">
+            <span class="letter">${escapeHtml(g.letter)}</span>
+            <span class="letter-count">${g.list.length} 词</span>
+            <span class="letter-toggle">▾</span>
+          </div>
+          <ul class="word-list">${g.list.map(wordLi).join('')}</ul>
+        </div>`
+      ).join('');
+
+    // 单个删除
+    wrap.querySelectorAll('.word-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const words = load();
+        words.splice(Number(btn.dataset.i), 1);
+        save(words);
+        renderList();
+      });
+    });
+
+    // 字母分组展开/收起
+    wrap.querySelectorAll('.letter-head').forEach(head => {
+      head.addEventListener('click', () => head.parentElement.classList.toggle('collapsed'));
+    });
+    document.getElementById('list-expand').addEventListener('click', () => {
+      wrap.querySelectorAll('.letter-group').forEach(el => el.classList.remove('collapsed'));
+    });
+    document.getElementById('list-collapse').addEventListener('click', () => {
+      wrap.querySelectorAll('.letter-group').forEach(el => el.classList.add('collapsed'));
+    });
+
+    // 勾选统计 + 全选
+    const checkboxes = wrap.querySelectorAll('.word-check');
+    const selectAll = wrap.querySelector('#select-all');
+    const selectedCount = wrap.querySelector('#selected-count');
+    function updateCount() {
+      const n = wrap.querySelectorAll('.word-check:checked').length;
+      selectedCount.textContent = '已选 ' + n + ' 个';
+      selectAll.checked = n === checkboxes.length;
+      document.getElementById('btn-clear').textContent = n > 0 ? '删除选中（' + n + '）' : '删除选中';
+    }
+    selectAll.addEventListener('change', () => {
+      checkboxes.forEach(c => c.checked = selectAll.checked);
+      updateCount();
+    });
+    checkboxes.forEach(c => c.addEventListener('change', updateCount));
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  document.getElementById('btn-export').addEventListener('click', () => {
+    const words = load();
+    if (!words.length) { alert('单词本为空'); return; }
+    const text = words.map(w =>
+      w.meanings.map(m => w.en + '  ' + m.zh + (m.pos ? '  ' + m.pos : '')).join('\n')
+    ).join('\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '我的单词本.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  document.getElementById('btn-import').addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt,.text,text/plain';
+    input.onchange = () => {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        const r = importText(String(reader.result));
+        flash(`导入完成：新增 ${r.added} 个释义，重复 ${r.dup} 次，跳过 ${r.skipped} 个`, (r.added + r.dup) > 0 ? 'ok' : 'no');
+        renderStats();
+        renderList();
+      };
+      reader.readAsText(file, 'utf-8');
+    };
+    input.click();
+  });
+
+  document.getElementById('btn-pack').addEventListener('click', () => {
+    const words = load();
+    const sentences = loadSentences();
+    if (!words.length && !sentences.length) { alert('单词本和句子本都为空，无需打包'); return; }
+    let packed = document.documentElement.outerHTML;
+    const reinject = (name, data) => {
+      const re = new RegExp('const ' + name + ' = .*?;');
+      return packed.replace(re, 'const ' + name + ' = ' + JSON.stringify(data).replace(/<\//g, '<\\/') + ';');
+    };
+    if (words.length) packed = reinject('EMBEDDED_DATA', words);
+    if (sentences.length) packed = reinject('EMBEDDED_SENTENCES', sentences);
+    const blob = new Blob([packed], { type: 'text/html;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '背单词工具（含数据）.html';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    flash('已下载完整版，数据已内嵌 ✓', 'ok');
+  });
+
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    const words = load();
+    const indexes = Array.from(document.querySelectorAll('.word-check:checked'))
+      .map(c => Number(c.dataset.i));
+    if (!indexes.length) { alert('请先勾选要删除的单词'); return; }
+    if (!confirm('确定删除选中的 ' + indexes.length + ' 个单词吗？')) return;
+    indexes.sort((a, b) => b - a).forEach(i => words.splice(i, 1));
+    save(words);
+    renderList();
+  });
+
+  // ---------- 日期记录 ----------
+  function renderHistory() {
+    const daily = loadDaily();
+    const wrap = document.getElementById('history-wrap');
+    const dates = Object.keys(daily).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+    if (!dates.length) {
+      wrap.innerHTML = '<div class="empty">还没有背诵记录，先去“背诵测试”背单词吧</div>';
+      return;
+    }
+    wrap.innerHTML =
+      '<div class="history-toolbar">' +
+        '<span>共 ' + dates.length + ' 天 · 点击日期展开/收起</span>' +
+        '<span>' +
+          '<button class="btn btn-ghost btn-sm" id="hist-expand">全部展开</button> ' +
+          '<button class="btn btn-ghost btn-sm" id="hist-collapse">全部收起</button>' +
+        '</span>' +
+      '</div>' +
+      dates.map(d => {
+        const entries = Object.values(daily[d]);
+        const quizTotal = entries.reduce((s, e) => s + (e.quiz || 0), 0);
+        const wrongTotal = entries.reduce((s, e) => s + (e.wrong || 0), 0);
+        return `
+          <div class="history-day collapsed">
+            <div class="history-day-head">
+              <span class="history-date">📅 ${escapeHtml(d)}</span>
+              <span class="history-stats">背 ${quizTotal} 次 · 错 ${wrongTotal} 次 · ${entries.length} 词</span>
+              <span class="history-toggle">▾</span>
+            </div>
+            <ul class="history-words">${entries.map(e => `
+              <li class="history-word">
+                <div class="word-main">
+                  <div class="word-en">${escapeHtml(e.en)}</div>
+                  <div class="word-zh">${(e.pos ? `<span class="pos-badge">${escapeHtml(posLabel(e.pos))}</span> ` : '') + escapeHtml(e.zh)}</div>
+                  <div class="word-meta">背 ${e.quiz || 0} 次 · 错 ${e.wrong || 0} 次</div>
+                </div>
+                ${(e.wrong || 0) > 0 ? '<span class="wrong-tag">背错</span>' : ''}
+              </li>`).join('')}</ul>
+            ${wrongTotal > 0 ? `<div class="history-day-foot"><button class="btn btn-primary btn-sm review-day-btn" data-date="${escapeHtml(d)}">回顾该日错词</button> <button class="btn btn-ghost btn-sm export-day-btn" data-date="${escapeHtml(d)}">导出该日错词</button></div>` : ''}
+          </div>`;
+      }).join('');
+    wrap.querySelectorAll('.history-day-head').forEach(head => {
+      head.addEventListener('click', () => head.parentElement.classList.toggle('collapsed'));
+    });
+    document.getElementById('hist-expand').addEventListener('click', () => {
+      wrap.querySelectorAll('.history-day').forEach(el => el.classList.remove('collapsed'));
+    });
+    document.getElementById('hist-collapse').addEventListener('click', () => {
+      wrap.querySelectorAll('.history-day').forEach(el => el.classList.add('collapsed'));
+    });
+    wrap.querySelectorAll('.review-day-btn').forEach(btn => {
+      btn.addEventListener('click', () => goReview(btn.dataset.date));
+    });
+    wrap.querySelectorAll('.export-day-btn').forEach(btn => {
+      btn.addEventListener('click', () => exportDayWrong(btn.dataset.date));
+    });
+  }
+
+  function renderReviewSelect() {
+    const daily = loadDaily();
+    const sel = document.getElementById('review-date');
+    const hint = document.getElementById('review-hint');
+    const dates = Object.keys(daily)
+      .map(d => ({ d, wrong: Object.values(daily[d]).reduce((s, e) => s + (e.wrong || 0), 0) }))
+      .filter(x => x.wrong > 0)
+      .sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0));
+    if (!dates.length) {
+      sel.innerHTML = '';
+      sel.disabled = true;
+      hint.textContent = '还没有背错的单词，继续加油！';
+      return;
+    }
+    sel.disabled = false;
+    sel.innerHTML = dates.map(x =>
+      `<option value="${escapeHtml(x.d)}">${escapeHtml(x.d)}（错 ${x.wrong} 个）</option>`
+    ).join('');
+    hint.textContent = '选择日期后点击“回顾该日错词”，只复习当天背错的单词。';
+  }
+
+  function goReview(d) {
+    switchPanel('quiz');
+    renderReviewSelect();
+    startReview(d);
+  }
+
+  function exportDayWrong(d) {
+    const daily = loadDaily();
+    const day = daily[d];
+    if (!day) { flash('该日期没有记录', 'no'); return; }
+    const wrong = Object.values(day).filter(e => (e.wrong || 0) > 0);
+    if (!wrong.length) { flash('该日期没有背错的单词', 'no'); return; }
+    const text = wrong.map(e => e.en + '  ' + e.zh + (e.pos ? '  ' + e.pos : '')).join('\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '错词_' + d + '.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    flash('已导出 ' + wrong.length + ' 个错词 ✓', 'ok');
+  }
+
+  // ---------- 背诵测试 ----------
+  let quizQueue = [];
+  let quizIndex = 0;
+  let quizChecked = false;
+  let quizMode = 'all';
+  let quizReviewDate = null;
+
+  function startQuiz() {
+    quizMode = 'all';
+    quizReviewDate = null;
+    const words = load();
+    const sel = quizPosSelect.getValues();
+    const includeNone = sel.includes('__none__');
+    const selPos = sel.filter(v => v !== '__none__');
+    const pool = [];
+    words.forEach(w => {
+      w.meanings.forEach(m => {
+        let ok;
+        if (!sel.length) ok = true;
+        else if (!m.pos) ok = includeNone;
+        else ok = selPos.includes(m.pos);
+        if (ok) pool.push({ en: w.en, pos: m.pos, zh: m.zh });
+      });
+    });
+    if (!pool.length) {
+      document.getElementById('quiz-chinese').textContent = sel.length ? '没有符合筛选的单词' : '暂无单词';
+      document.getElementById('quiz-progress').textContent = '';
+      document.getElementById('quiz-input').value = '';
+      document.getElementById('quiz-feedback').textContent = '';
+      document.getElementById('quiz-answer').textContent = '';
+      return;
+    }
+    quizQueue = pool.slice().sort(() => Math.random() - 0.5);
+    quizIndex = 0;
+    showCurrent();
+  }
+
+  function startReview(d) {
+    const daily = loadDaily();
+    const day = daily[d];
+    if (!day) { flash('该日期没有记录', 'no'); return; }
+    const pool = [];
+    Object.values(day).forEach(e => {
+      if ((e.wrong || 0) > 0) pool.push({ en: e.en, pos: e.pos || '', zh: e.zh });
+    });
+    if (!pool.length) { flash('该日期没有背错的单词', 'no'); return; }
+    quizMode = 'review';
+    quizReviewDate = d;
+    quizQueue = pool.slice().sort(() => Math.random() - 0.5);
+    quizIndex = 0;
+    showCurrent();
+  }
+
+  function showCurrent() {
+    quizChecked = false;
+    const w = quizQueue[quizIndex];
+    document.getElementById('quiz-progress').textContent = (quizMode === 'review' ? '回顾 ' + quizReviewDate + ' · ' : '') + `第 ${quizIndex + 1} / ${quizQueue.length} 个`;
+    document.getElementById('quiz-chinese').innerHTML = (w.pos ? `<span class="pos-badge">${escapeHtml(posLabel(w.pos))}</span> ` : '') + escapeHtml(w.zh);
+    document.getElementById('quiz-input').value = '';
+    document.getElementById('quiz-feedback').textContent = '';
+    document.getElementById('quiz-feedback').className = 'feedback';
+    document.getElementById('quiz-answer').textContent = '';
+    document.getElementById('quiz-input').focus();
+  }
+
+  function check() {
+    if (!quizQueue.length) return;
+    const w = quizQueue[quizIndex];
+    const input = normalize(document.getElementById('quiz-input').value);
+    if (!input) { return; }
+    if (quizChecked) { next(); return; }
+
+    const fb = document.getElementById('quiz-feedback');
+    const ans = document.getElementById('quiz-answer');
+    // 允许多个单词对应同一中文释义时都算对；回顾模式下也认可单词本身
+    const correct = normalize(input) === normalize(w.en) ||
+      load().some(x =>
+        normalize(x.en) === input && x.meanings.some(m => normalize(m.zh) === normalize(w.zh))
+      );
+    recordQuiz(w, correct);
+    if (correct) {
+      fb.textContent = '✓ 正确！';
+      fb.className = 'feedback ok';
+    } else {
+      fb.textContent = '✗ 答错了';
+      fb.className = 'feedback no';
+      ans.textContent = '正确答案：' + w.en + '（' + w.zh + '）';
+    }
+    quizChecked = true;
+  }
+
+  function next() {
+    quizIndex++;
+    if (quizIndex >= quizQueue.length) {
+      document.getElementById('quiz-progress').textContent = '🎉 一轮完成！';
+      document.getElementById('quiz-chinese').textContent = '全部背完了';
+      document.getElementById('quiz-feedback').textContent = '点击下方重新开始';
+      document.getElementById('quiz-feedback').className = 'feedback ok';
+      document.getElementById('quiz-answer').textContent = '';
+      document.getElementById('quiz-input').value = '';
+      document.getElementById('btn-check').textContent = '再来一轮';
+      document.getElementById('btn-check').dataset.restart = '1';
+      return;
+    }
+    showCurrent();
+  }
+
+  document.getElementById('btn-check').addEventListener('click', () => {
+    if (document.getElementById('btn-check').dataset.restart) {
+      document.getElementById('btn-check').dataset.restart = '';
+      document.getElementById('btn-check').textContent = '检查';
+      if (quizMode === 'review') startReview(quizReviewDate);
+      else startQuiz();
+      return;
+    }
+    check();
+  });
+
+  document.getElementById('btn-review').addEventListener('click', () => {
+    const d = document.getElementById('review-date').value;
+    if (!d) { flash('请先选择日期', 'no'); return; }
+    startReview(d);
+  });
+
+  document.getElementById('btn-skip').addEventListener('click', () => {
+    if (!quizQueue.length) return;
+    if (quizChecked) { next(); return; }
+    const w = quizQueue[quizIndex];
+    document.getElementById('quiz-answer').textContent = '答案：' + w.en + '（' + w.zh + '）';
+    document.getElementById('quiz-feedback').textContent = '';
+    recordQuiz(w, false);
+    quizChecked = true;
+  });
+
+  document.getElementById('quiz-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      if (quizChecked) next();
+      else check();
+    }
+  });
+
+  // 单词本搜索框
+  const searchInput = document.getElementById('search-input');
+  const searchClear = document.getElementById('search-clear');
+  searchInput.addEventListener('input', () => {
+    searchClear.classList.toggle('show', !!searchInput.value);
+    renderList();
+  });
+  searchClear.addEventListener('click', () => {
+    searchInput.value = '';
+    searchClear.classList.remove('show');
+    renderList();
+    searchInput.focus();
+  });
+
+  // ---------- 句子（句库 + 汉译英填空背诵） ----------
+  const SENT_KEY = 'vocab_sentences_v1';
+
+  function loadSentences() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(SENT_KEY)) || [];
+      return arr.map(s => ({
+        en: String(s.en || '').trim(),
+        zh: String(s.zh || '').trim(),
+        addCount: s.addCount || 1,
+        quizCount: s.quizCount || 0,
+        wrongCount: s.wrongCount || 0
+      })).filter(s => s.en && s.zh);
+    } catch (e) { return []; }
+  }
+  function saveSentences(arr) { localStorage.setItem(SENT_KEY, JSON.stringify(arr)); schedulePush(); }
+
+  if (EMBEDDED_SENTENCES && EMBEDDED_SENTENCES.length && !localStorage.getItem(SENT_KEY)) {
+    localStorage.setItem(SENT_KEY, JSON.stringify(EMBEDDED_SENTENCES));
+  }
+
+  function addSentence(en, zh) {
+    const e = String(en || '').trim();
+    const z = String(zh || '').trim();
+    if (!e) return { ok: false, msg: '英文句子不能为空' };
+    if (!z) return { ok: false, msg: '请填写中文翻译' };
+    const arr = loadSentences();
+    const exist = arr.find(s => normalize(s.en) === normalize(e));
+    if (exist) {
+      exist.addCount = (exist.addCount || 1) + 1;
+      if (normalize(exist.zh) !== normalize(z)) exist.zh = z;
+      saveSentences(arr);
+      return { ok: true, dup: true };
+    }
+    arr.push({ en: e, zh: z, addCount: 1, quizCount: 0, wrongCount: 0 });
+    saveSentences(arr);
+    return { ok: true, dup: false };
+  }
+
+  function importSentences(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    let added = 0, dup = 0, skipped = 0;
+    lines.forEach(line => {
+      let en, zh;
+      const idx = line.indexOf('|||');
+      if (idx >= 0) { en = line.slice(0, idx).trim(); zh = line.slice(idx + 3).trim(); }
+      else {
+        const m = line.match(/^(.+?)[\t，,；;]+(.+)$/);
+        if (m) { en = m[1]; zh = m[2]; } else { skipped++; return; }
+      }
+      const r = addSentence(en, zh);
+      if (!r.ok) skipped++;
+      else if (r.dup) dup++;
+      else added++;
+    });
+    return { added, dup, skipped };
+  }
+
+  function renderSentStats() {
+    document.getElementById('sent-stat-total').textContent = loadSentences().length;
+  }
+  function renderSentList() {
+    renderSentStats();
+    const arr = loadSentences();
+    const wrap = document.getElementById('sent-list-wrap');
+    if (!arr.length) {
+      wrap.innerHTML = '<div class="empty">还没有句子，先去“添加句子”录入吧</div>';
+      return;
+    }
+    wrap.innerHTML = '<ul class="word-list">' + arr.map((s, i) =>
+      `<li class="word-item">
+        <div class="word-main">
+          <div class="word-en">${escapeHtml(s.en)}</div>
+          <div class="word-zh">${escapeHtml(s.zh)}</div>
+          <div class="word-meta">背诵 ${s.quizCount || 0} 次 · 错误 ${s.wrongCount || 0} 次</div>
+        </div>
+        <button class="word-del" data-i="${i}">删除</button>
+      </li>`).join('') + '</ul>';
+    wrap.querySelectorAll('.word-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const a = loadSentences();
+        a.splice(Number(btn.dataset.i), 1);
+        saveSentences(a);
+        renderSentList();
+      });
+    });
+  }
+
+  // 分词：把单词两侧的标点拆开，单词作为填空
+  function splitToken(tok) {
+    const pre = (tok.match(/^[^A-Za-z0-9'’\-]+/) || [''])[0];
+    const rest = tok.slice(pre.length);
+    const post = (rest.match(/[^A-Za-z0-9'’\-]+$/) || [''])[0];
+    const word = rest.slice(0, rest.length - post.length);
+    return { pre, word, post };
+  }
+  function tokenizeSentence(s) {
+    const units = [];
+    String(s || '').trim().split(/\s+/).forEach(tok => {
+      const { pre, word, post } = splitToken(tok);
+      if (word) units.push({ type: 'word', pre, word, post });
+      else units.push({ type: 'text', text: tok });
+    });
+    return units;
+  }
+  function normWord(s) {
+    return String(s || '').trim().toLowerCase().replace(/[’‘]/g, "'").replace(/[“”]/g, '"');
+  }
+
+  function renderBlanks(sentence) {
+    const wrap = document.getElementById('sentence-blanks');
+    wrap.innerHTML = '';
+    tokenizeSentence(sentence.en).forEach(u => {
+      if (u.type === 'text') {
+        const span = document.createElement('span');
+        span.className = 'sblk-text';
+        span.textContent = u.text;
+        wrap.appendChild(span);
+        return;
+      }
+      const blk = document.createElement('span');
+      blk.className = 'sblk';
+      const line = document.createElement('span');
+      line.className = 'sline';
+      if (u.pre) { const p = document.createElement('span'); p.className = 'pre'; p.textContent = u.pre; line.appendChild(p); }
+      const inp = document.createElement('input');
+      inp.className = 'blank-input';
+      inp.type = 'text';
+      inp.autocomplete = 'off';
+      inp.spellcheck = false;
+      inp.dataset.word = u.word;
+      inp.style.width = (Math.max(u.word.length, 2) * 0.95 + 1.4) + 'em';
+      line.appendChild(inp);
+      if (u.post) { const p = document.createElement('span'); p.className = 'post'; p.textContent = u.post; line.appendChild(p); }
+      const ans = document.createElement('span');
+      ans.className = 'blank-answer';
+      blk.appendChild(line);
+      blk.appendChild(ans);
+      wrap.appendChild(blk);
+    });
+    const inputs = Array.from(wrap.querySelectorAll('.blank-input'));
+    inputs.forEach((inp, i) => {
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (i < inputs.length - 1) inputs[i + 1].focus();
+          else document.getElementById('btn-sent-check').click();
+        }
+      });
+    });
+    if (inputs.length) inputs[0].focus();
+  }
+
+  let sentQueue = [];
+  let sentIndex = 0;
+  let sentenceChecked = false;
+
+  function startSentenceQuiz() {
+    const arr = loadSentences();
+    if (!arr.length) {
+      document.getElementById('sent-progress').textContent = '';
+      document.getElementById('sent-zh').textContent = '还没有句子，先去“句子”添加吧';
+      document.getElementById('sentence-blanks').innerHTML = '';
+      document.getElementById('sent-feedback').textContent = '';
+      return;
+    }
+    sentQueue = arr.slice().sort(() => Math.random() - 0.5);
+    sentIndex = 0;
+    showSentenceCurrent();
+  }
+
+  function showSentenceCurrent() {
+    sentenceChecked = false;
+    const s = sentQueue[sentIndex];
+    document.getElementById('sent-progress').textContent = `第 ${sentIndex + 1} / ${sentQueue.length} 句`;
+    document.getElementById('sent-zh').textContent = s.zh;
+    document.getElementById('sent-feedback').textContent = '';
+    document.getElementById('sent-feedback').className = 'feedback';
+    renderBlanks(s);
+  }
+
+  function recordSentenceQuiz(s, correct) {
+    const arr = loadSentences();
+    const item = arr.find(x => normalize(x.en) === normalize(s.en));
+    if (item) {
+      item.quizCount = (item.quizCount || 0) + 1;
+      if (!correct) item.wrongCount = (item.wrongCount || 0) + 1;
+      saveSentences(arr);
+    }
+  }
+
+  function checkSentence() {
+    if (!sentQueue.length) return;
+    if (sentenceChecked) { nextSentence(); return; }
+    const s = sentQueue[sentIndex];
+    const inputs = Array.from(document.querySelectorAll('#sentence-blanks .blank-input'));
+    let allCorrect = true;
+    inputs.forEach(inp => {
+      const good = normWord(inp.value) === normWord(inp.dataset.word);
+      const blk = inp.closest('.sblk');
+      const ans = blk ? blk.querySelector('.blank-answer') : null;
+      inp.classList.remove('ok', 'no');
+      if (good) {
+        inp.classList.add('ok');
+        if (ans) ans.textContent = '';
+      } else {
+        inp.classList.add('no');
+        allCorrect = false;
+        if (ans) ans.textContent = inp.dataset.word;
+      }
+      inp.readOnly = true;
+    });
+    recordSentenceQuiz(s, allCorrect);
+    const fb = document.getElementById('sent-feedback');
+    if (allCorrect) {
+      fb.textContent = '✓ 全部正确！';
+      fb.className = 'feedback ok';
+    } else {
+      fb.textContent = '✗ 有单词写错了，红色为正确答案';
+      fb.className = 'feedback no';
+    }
+    sentenceChecked = true;
+  }
+
+  function revealSentence() {
+    const inputs = Array.from(document.querySelectorAll('#sentence-blanks .blank-input'));
+    inputs.forEach(inp => {
+      const blk = inp.closest('.sblk');
+      const ans = blk ? blk.querySelector('.blank-answer') : null;
+      inp.value = inp.dataset.word;
+      inp.classList.add('no');
+      if (ans) ans.textContent = inp.dataset.word;
+      inp.readOnly = true;
+    });
+  }
+
+  function nextSentence() {
+    sentIndex++;
+    if (sentIndex >= sentQueue.length) {
+      document.getElementById('sent-progress').textContent = '🎉 一轮完成！';
+      document.getElementById('sent-zh').textContent = '全部背完了';
+      document.getElementById('sent-feedback').textContent = '点击下方重新开始';
+      document.getElementById('sent-feedback').className = 'feedback ok';
+      document.getElementById('sentence-blanks').innerHTML = '';
+      document.getElementById('btn-sent-check').textContent = '再来一轮';
+      document.getElementById('btn-sent-check').dataset.restart = '1';
+      return;
+    }
+    showSentenceCurrent();
+  }
+
+  document.getElementById('btn-sent-add').addEventListener('click', () => {
+    const en = document.getElementById('sent-en').value;
+    const zh = document.getElementById('sent-zh-input').value;
+    const r = addSentence(en, zh);
+    if (r.ok) {
+      document.getElementById('sent-en').value = '';
+      document.getElementById('sent-zh-input').value = '';
+      flash(r.dup ? '该句子已存在，录入次数 +1 ✓' : '已添加句子 ✓', 'ok');
+      renderSentList();
+    } else {
+      flash(r.msg, 'no');
+    }
+  });
+
+  document.getElementById('btn-sent-bulk').addEventListener('click', () => {
+    const text = document.getElementById('sent-bulk').value;
+    const r = importSentences(text);
+    document.getElementById('sent-bulk').value = '';
+    flash(`导入完成：新增 ${r.added} 句，重复 ${r.dup} 句，跳过 ${r.skipped} 句`, (r.added + r.dup) > 0 ? 'ok' : 'no');
+    renderSentList();
+  });
+
+  document.getElementById('btn-sent-export').addEventListener('click', () => {
+    const arr = loadSentences();
+    if (!arr.length) { alert('句子本为空'); return; }
+    const text = arr.map(s => s.en + ' ||| ' + s.zh).join('\n');
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '我的句子本.txt';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  document.getElementById('btn-sent-clear').addEventListener('click', () => {
+    if (!confirm('确定清空整个句子本吗？此操作不可恢复。')) return;
+    saveSentences([]);
+    renderSentList();
+  });
+
+  document.getElementById('btn-sent-check').addEventListener('click', () => {
+    if (document.getElementById('btn-sent-check').dataset.restart) {
+      document.getElementById('btn-sent-check').dataset.restart = '';
+      document.getElementById('btn-sent-check').textContent = '检查';
+      startSentenceQuiz();
+      return;
+    }
+    checkSentence();
+  });
+
+  document.getElementById('btn-sent-skip').addEventListener('click', () => {
+    if (!sentQueue.length) return;
+    if (sentenceChecked) { nextSentence(); return; }
+    const s = sentQueue[sentIndex];
+    revealSentence();
+    recordSentenceQuiz(s, false);
+    document.getElementById('sent-feedback').textContent = '';
+    sentenceChecked = true;
+  });
+
+  // ---------- 云同步（Supabase） ----------
+  const SUPABASE_URL = 'https://usgegfzksymzeoyxtrps.supabase.co';
+  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzZ2VnZnprc3ltemVveXh0cnBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MTU1OTMsImV4cCI6MjEwOTE5MTU5M30.hMo-YFxZ34N8IHDLjpYOmqH3hgyJGuQDPiExl-SqfNY';
+  const SYNC_KEY_STORAGE = 'vocab_sync_code';
+  const META_KEY = 'vocab_sync_meta';
+
+  function getSyncCode() { return localStorage.getItem(SYNC_KEY_STORAGE) || ''; }
+  function setSyncCode(c) {
+    if (c) localStorage.setItem(SYNC_KEY_STORAGE, c);
+    else localStorage.removeItem(SYNC_KEY_STORAGE);
+    renderSyncStatus();
+  }
+  function localStamp() { return Number(localStorage.getItem(META_KEY) || 0); }
+  function touchStamp() { localStorage.setItem(META_KEY, String(Date.now())); }
+
+  function snapshot() {
+    return {
+      words: JSON.parse(localStorage.getItem(KEY) || '[]'),
+      daily: JSON.parse(localStorage.getItem(DAILY_KEY) || '{}'),
+      sentences: JSON.parse(localStorage.getItem(SENT_KEY) || '[]')
+    };
+  }
+
+  function cloudRead() {
+    const c = getSyncCode();
+    if (!c) return Promise.resolve(null);
+    return fetch(SUPABASE_URL + '/rest/v1/vocab_sync?sync_code=eq.' + encodeURIComponent(c) + '&select=data,updated_at', {
+      headers: { 'apikey': SUPABASE_ANON, 'Authorization': 'Bearer ' + SUPABASE_ANON }
+    }).then(r => r.json()).then(rows => (rows && rows[0]) || null).catch(() => null);
+  }
+
+  function cloudWrite(snap) {
+    const c = getSyncCode();
+    if (!c) return Promise.resolve();
+    return fetch(SUPABASE_URL + '/rest/v1/vocab_sync', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_ANON,
+        'Authorization': 'Bearer ' + SUPABASE_ANON,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({ sync_code: c, data: snap, updated_at: new Date().toISOString() })
+    }).then(r => { if (r.ok) setSyncStatus('已同步'); }).catch(() => setSyncStatus('同步失败'));
+  }
+
+  let pushTimer = null;
+  function schedulePush() {
+    touchStamp();
+    if (!getSyncCode()) return;
+    setSyncStatus('待同步…');
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => cloudWrite(snapshot()), 800);
+  }
+
+  async function pullSync() {
+    if (!getSyncCode()) return;
+    const row = await cloudRead();
+    if (!row) { await cloudWrite(snapshot()); touchStamp(); setSyncStatus('已上传'); return; }
+    const cloudAt = Date.parse(row.updated_at) || 0;
+    if (cloudAt > localStamp()) {
+      const d = row.data || {};
+      localStorage.setItem(KEY, JSON.stringify(d.words || []));
+      localStorage.setItem(SENT_KEY, JSON.stringify(d.sentences || []));
+      const mergedDaily = Object.assign({}, JSON.parse(localStorage.getItem(DAILY_KEY) || '{}'), d.daily || {});
+      localStorage.setItem(DAILY_KEY, JSON.stringify(mergedDaily));
+      localStorage.setItem(META_KEY, String(cloudAt));
+      setSyncStatus('已拉取云端数据');
+      renderAll();
+    } else if (localStamp() > cloudAt) {
+      await cloudWrite(snapshot());
+    } else {
+      setSyncStatus('已同步');
+    }
+  }
+
+  function renderSyncStatus() {
+    const el = document.getElementById('sync-status');
+    if (el) el.textContent = getSyncCode() ? '☁️ 已连接' : '☁️ 未设置同步';
+  }
+  function setSyncStatus(t) {
+    const el = document.getElementById('sync-status');
+    if (el) el.textContent = '☁️ ' + t;
+  }
+  function renderAll() {
+    renderStats(); renderList(); renderHistory(); renderSentList();
+  }
+
+  document.getElementById('btn-sync').addEventListener('click', () => {
+    const cur = getSyncCode();
+    const input = prompt('输入同步码（两台设备填同一个即可，相当于密码；留空则关闭云同步）', cur);
+    if (input === null) return;
+    setSyncCode(input.trim());
+    if (getSyncCode()) pullSync();
+    else setSyncStatus('已关闭同步');
+  });
+
+  renderSyncStatus();
+  pullSync();
+
+  // 初始渲染
+  const addPosSelect = createPosDropdown(document.getElementById('word-pos'), {
+    placeholder: '未标注',
+    onchange: () => renderMeaningBoxes()
+  });
+  const quizPosSelect = createPosDropdown(document.getElementById('quiz-pos-filter'), {
+    placeholder: '全部词性',
+    includeNone: true,
+    onchange: () => startQuiz()
+  });
+  renderMeaningBoxes();
+  renderStats();
+  renderReviewSelect();
+})();
+</script>
+</body>
+</html>
