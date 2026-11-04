@@ -126,7 +126,7 @@
   .word-item:last-child { border-bottom: none; }
   .word-main { flex: 1; }
   .word-check { width: 17px; height: 17px; cursor: pointer; flex-shrink: 0; }
-  .word-en { font-weight: 600; font-size: 15px; }
+  .word-en { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 15px; }
   .word-zh { color: var(--muted); font-size: 14px; }
   .word-meta { color: #aab2c5; font-size: 12px; margin-top: 3px; }
   .pos-badge {
@@ -135,6 +135,12 @@
     border-radius: 6px; padding: 2px 8px; vertical-align: middle;
   }
   .word-del { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 14px; }
+  .word-speak {
+    flex-shrink: 0; background: none; border: none; cursor: pointer;
+    font-size: 16px; padding: 2px 5px; border-radius: 6px; color: var(--muted);
+    line-height: 1; transition: all .15s;
+  }
+  .word-speak:hover { background: #eef1fb; color: var(--primary); }
   .list-toolbar {
     display: flex; align-items: center; justify-content: space-between;
     padding: 0 4px 12px; font-size: 13px; color: var(--muted);
@@ -426,6 +432,7 @@
     <div class="card">
       <div class="quiz-progress" id="sent-progress"></div>
       <div class="sentence-zh" id="sent-zh">加载中…</div>
+      <button class="btn btn-ghost btn-sm" id="btn-sent-speak" style="display:block;margin:10px auto 0;">🔊 听整句</button>
       <p class="hint" style="text-align:center;">根据中文翻译，在空格中填入每个英文单词</p>
       <div class="sentence-blanks" id="sentence-blanks"></div>
       <div class="feedback" id="sent-feedback"></div>
@@ -765,6 +772,35 @@
     flash._t = setTimeout(() => el.classList.remove('show'), 2200);
   }
 
+  // ---------- 发音 ----------
+  function speakNative(text) {
+    if (!('speechSynthesis' in window)) return;
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'en-US';
+      u.rate = 0.95;
+      speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+  function speak(text, kind) {
+    const url = kind === 'sentence'
+      ? 'https://fanyi.baidu.com/gettts?lan=en&text=' + encodeURIComponent(text) + '&spd=3&source=web'
+      : 'https://dict.youdao.com/dictvoice?audio=' + encodeURIComponent(text) + '&type=2';
+    const audio = new Audio(url);
+    let fellBack = false;
+    const fallback = () => { if (!fellBack) { fellBack = true; speakNative(text); } };
+    audio.addEventListener('error', fallback);
+    audio.play().catch(fallback);
+  }
+  function wordWithSpeak(en) {
+    return escapeHtml(en) + ' <button class="word-speak" data-speak="' + escapeHtml(en) + '" data-kind="word" title="播放发音">🔊</button>';
+  }
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.word-speak');
+    if (btn) speak(btn.dataset.speak, btn.dataset.kind || 'word');
+  });
+
   // ---------- 单词本 ----------
   function renderStats() {
     const words = load();
@@ -814,7 +850,7 @@
       `<li class="word-item">
         <input type="checkbox" class="word-check" data-i="${i}">
         <div class="word-main">
-          <div class="word-en">${escapeHtml(w.en)}</div>
+          <div class="word-en"><span>${escapeHtml(w.en)}</span> <button class="word-speak" data-speak="${escapeHtml(w.en)}" data-kind="word" title="播放发音">🔊</button></div>
           <div class="word-zh">${w.meanings.map(m => (m.pos ? `<span class="pos-badge">${escapeHtml(posLabel(m.pos))}</span> ` : '') + escapeHtml(m.zh)).join('；')}</div>
           <div class="word-meta">录入 ${w.addCount || 0} 次 · 背诵 ${w.quizCount || 0} 次 · 错误 ${w.wrongCount || 0} 次 · 正确率 ${rateOf(w)}</div>
         </div>
@@ -980,7 +1016,7 @@
             <ul class="history-words">${entries.map(e => `
               <li class="history-word">
                 <div class="word-main">
-                  <div class="word-en">${escapeHtml(e.en)}</div>
+                  <div class="word-en">${wordWithSpeak(e.en)}</div>
                   <div class="word-zh">${(e.pos ? `<span class="pos-badge">${escapeHtml(posLabel(e.pos))}</span> ` : '') + escapeHtml(e.zh)}</div>
                   <div class="word-meta">背 ${e.quiz || 0} 次 · 错 ${e.wrong || 0} 次</div>
                 </div>
@@ -1135,7 +1171,7 @@
     } else {
       fb.textContent = '✗ 答错了';
       fb.className = 'feedback no';
-      ans.textContent = '正确答案：' + w.en + '（' + w.zh + '）';
+      ans.innerHTML = '正确答案：' + wordWithSpeak(w.en) + '（' + escapeHtml(w.zh) + '）';
     }
     quizChecked = true;
   }
@@ -1177,7 +1213,7 @@
     if (!quizQueue.length) return;
     if (quizChecked) { next(); return; }
     const w = quizQueue[quizIndex];
-    document.getElementById('quiz-answer').textContent = '答案：' + w.en + '（' + w.zh + '）';
+    document.getElementById('quiz-answer').innerHTML = '答案：' + wordWithSpeak(w.en) + '（' + escapeHtml(w.zh) + '）';
     document.getElementById('quiz-feedback').textContent = '';
     recordQuiz(w, false);
     quizChecked = true;
@@ -1276,7 +1312,7 @@
     wrap.innerHTML = '<ul class="word-list">' + arr.map((s, i) =>
       `<li class="word-item">
         <div class="word-main">
-          <div class="word-en">${escapeHtml(s.en)}</div>
+          <div class="word-en"><span>${escapeHtml(s.en)}</span> <button class="word-speak" data-speak="${escapeHtml(s.en)}" data-kind="sentence" title="播放发音">🔊</button></div>
           <div class="word-zh">${escapeHtml(s.zh)}</div>
           <div class="word-meta">背诵 ${s.quizCount || 0} 次 · 错误 ${s.wrongCount || 0} 次</div>
         </div>
@@ -1360,6 +1396,7 @@
   let sentQueue = [];
   let sentIndex = 0;
   let sentenceChecked = false;
+  let currentSentence = null;
 
   function startSentenceQuiz() {
     const arr = loadSentences();
@@ -1378,6 +1415,7 @@
   function showSentenceCurrent() {
     sentenceChecked = false;
     const s = sentQueue[sentIndex];
+    currentSentence = s;
     document.getElementById('sent-progress').textContent = `第 ${sentIndex + 1} / ${sentQueue.length} 句`;
     document.getElementById('sent-zh').textContent = s.zh;
     document.getElementById('sent-feedback').textContent = '';
@@ -1513,6 +1551,10 @@
     recordSentenceQuiz(s, false);
     document.getElementById('sent-feedback').textContent = '';
     sentenceChecked = true;
+  });
+
+  document.getElementById('btn-sent-speak').addEventListener('click', () => {
+    if (currentSentence) speak(currentSentence.en, 'sentence');
   });
 
   // ---------- 云同步（Supabase） ----------
