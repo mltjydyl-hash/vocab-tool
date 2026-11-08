@@ -270,6 +270,19 @@
   .plan-item .plan-due { font-size: 12px; color: var(--muted); margin-top: 3px; }
   .plan-due.today { color: #b8860b; font-weight: 700; }
 
+  /* 自传单词：从单词本勾选 */
+  .plan-picker-list {
+    max-height: 340px; overflow-y: auto; margin: 4px 0 12px;
+    border: 1px solid var(--border); border-radius: 10px; background: #fff;
+  }
+  .picker-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer;
+  }
+  .picker-item:last-child { border-bottom: none; }
+  .picker-item .word-main { flex: 1; min-width: 0; }
+  .picker-item .word-zh { margin-top: 2px; }
+
   /* 挖空填词 */
   .sentence-blanks.cloze { display: block; text-align: center; font-size: 20px; font-weight: 600; line-height: 2; padding: 16px 4px; }
   .sentence-blanks.cloze .blank-input { font-size: 18px; margin: 0 2px; vertical-align: baseline; }
@@ -319,6 +332,11 @@
     /* 工具栏允许换行，避免窄屏被撑开 */
     .list-toolbar, .letter-toolbar, .history-toolbar { flex-wrap: wrap; gap: 8px; }
     .history-day-head { flex-wrap: wrap; }
+
+    /* 自传单词：勾选列表收矮、待背清单按钮换行 */
+    .plan-picker-list { max-height: 240px; }
+    .picker-item { min-height: 40px; }
+    .plan-item { flex-wrap: wrap; }
 
     .toast { bottom: 20px; }
   }
@@ -414,7 +432,17 @@
     </div>
     <div class="card" id="quiz-plan-card" style="display:none;">
       <h2>自传单词 · 待背清单</h2>
-      <textarea id="plan-words" placeholder="英文 中文 [词性]（每行一个，例如：apple 苹果 名词）"></textarea>
+      <p class="hint">从单词本里勾选要背的单词（勾选即选中该词全部释义）。</p>
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input id="plan-search" placeholder="搜索英文 / 中文释义…" autocomplete="off">
+        <button id="plan-search-clear" class="search-clear" title="清空">✕</button>
+      </div>
+      <div class="list-toolbar">
+        <label><input type="checkbox" id="plan-select-all"> 全选</label>
+        <span id="plan-selected-count">已选 0 个</span>
+      </div>
+      <div id="plan-picker-list" class="plan-picker-list"></div>
       <div style="margin-top:10px;">
         <label>背诵时间</label>
         <div class="seg" id="plan-due-seg">
@@ -1295,7 +1323,7 @@
     document.getElementById('quiz-plan-card').style.display = (mode === 'plan') ? '' : 'none';
     document.getElementById('quiz-pos-filter-card').style.display = (mode === 'all') ? '' : 'none';
     if (mode === 'date') renderAddedDateSelect();
-    if (mode === 'plan') renderPlanList();
+    if (mode === 'plan') { renderPlanList(); renderPlanPicker(); }
     if (mode === 'all') startQuiz();
   }
 
@@ -1769,6 +1797,7 @@
 
   // ---------- 待背清单（自传单词 + 到期提醒） ----------
   const PLAN_KEY = 'vocab_plans_v1';
+  const planSelected = new Set(); // 从单词本勾选的英文单词（跨搜索保留）
 
   function loadPlans() {
     try {
@@ -1794,24 +1823,83 @@
     return diff + ' 天后到期';
   }
 
-  function parsePlanWords(text) {
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    const words = [];
-    lines.forEach(line => {
-      let en, zh, pos = '';
-      const m3 = line.match(/^(.+?)[\s,，、\t]+(.+?)[\s,，、\t]+(.+)$/);
-      if (m3) {
-        const tok = m3[3].split(/[\s,，、/|]+/).map(normalizePos).filter(Boolean);
-        if (tok.length && tok.every(t => POS_LIST.includes(t))) { en = m3[1]; zh = m3[2]; pos = tok[0]; }
-        else { const m2 = line.match(/^(.+?)[\s,，、\t]+(.+)$/); if (m2) { en = m2[1]; zh = m2[2]; } }
-      } else {
-        const m2 = line.match(/^(.+?)[\s,，、\t]+(.+)$/);
-        if (m2) { en = m2[1]; zh = m2[2]; }
-      }
-      if (en && zh) words.push({ en: en.trim(), zh: zh.trim(), pos });
-    });
-    return words;
+  function renderPlanPicker() {
+    const words = load();
+    const wrap = document.getElementById('plan-picker-list');
+    const q = (document.getElementById('plan-search').value || '').trim().toLowerCase();
+    if (!words.length) {
+      wrap.innerHTML = '<div class="empty">单词本还没有单词，先去「记录单词」添加吧</div>';
+      document.getElementById('plan-selected-count').textContent = '已选 0 个';
+      document.getElementById('plan-select-all').checked = false;
+      return;
+    }
+    const items = q
+      ? words.filter(w =>
+          w.en.toLowerCase().includes(q) ||
+          w.meanings.some(m => m.zh.toLowerCase().includes(q) ||
+            (m.pos && posLabel(m.pos).toLowerCase().includes(q))))
+      : words.slice();
+    if (!items.length) {
+      wrap.innerHTML = '<div class="empty">没有匹配「' + escapeHtml(q) + '」的单词</div>';
+      document.getElementById('plan-select-all').checked = false;
+      return;
+    }
+    items.sort((a, b) => a.en.localeCompare(b.en, 'en'));
+    wrap.innerHTML = items.map(w =>
+      `<label class="picker-item">
+        <input type="checkbox" class="plan-check" data-en="${escapeHtml(w.en)}"${planSelected.has(w.en) ? ' checked' : ''}>
+        <div class="word-main">
+          <div class="word-en">${wordWithSpeak(w.en)}</div>
+          <div class="word-zh">${w.meanings.map(m => (m.pos ? `<span class="pos-badge">${escapeHtml(posLabel(m.pos))}</span> ` : '') + escapeHtml(m.zh)).join('；')}</div>
+        </div>
+      </label>`
+    ).join('');
+    updatePlanSelected();
   }
+
+  function collectPlanWords() {
+    const words = load();
+    const out = [];
+    words.forEach(w => {
+      if (!planSelected.has(w.en)) return;
+      w.meanings.forEach(m => out.push({ en: w.en, zh: m.zh, pos: m.pos }));
+    });
+    return out;
+  }
+
+  function updatePlanSelected() {
+    document.getElementById('plan-selected-count').textContent = '已选 ' + planSelected.size + ' 个';
+    const boxes = document.querySelectorAll('#plan-picker-list .plan-check');
+    document.getElementById('plan-select-all').checked = boxes.length > 0 && Array.from(boxes).every(b => b.checked);
+  }
+
+  document.getElementById('plan-picker-list').addEventListener('change', e => {
+    if (!e.target.classList.contains('plan-check')) return;
+    const en = e.target.dataset.en;
+    if (e.target.checked) planSelected.add(en); else planSelected.delete(en);
+    updatePlanSelected();
+  });
+
+  document.getElementById('plan-select-all').addEventListener('change', e => {
+    document.querySelectorAll('#plan-picker-list .plan-check').forEach(cb => {
+      cb.checked = e.target.checked;
+      if (e.target.checked) planSelected.add(cb.dataset.en); else planSelected.delete(cb.dataset.en);
+    });
+    updatePlanSelected();
+  });
+
+  const planSearch = document.getElementById('plan-search');
+  const planSearchClear = document.getElementById('plan-search-clear');
+  planSearch.addEventListener('input', () => {
+    planSearchClear.classList.toggle('show', !!planSearch.value);
+    renderPlanPicker();
+  });
+  planSearchClear.addEventListener('click', () => {
+    planSearch.value = '';
+    planSearchClear.classList.remove('show');
+    renderPlanPicker();
+    planSearch.focus();
+  });
 
   function addPlan(words, dueDate) {
     const plans = loadPlans();
@@ -1838,7 +1926,7 @@
   function renderPlanList() {
     const wrap = document.getElementById('plan-list');
     const plans = loadPlans().slice().sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
-    if (!plans.length) { wrap.innerHTML = '<p class="hint">还没有待背清单，粘贴单词并选个时间加入。</p>'; return; }
+    if (!plans.length) { wrap.innerHTML = '<p class="hint">还没有待背清单，从上面勾选单词并选个时间加入。</p>'; return; }
     wrap.innerHTML = plans.map(p => {
       const due = !p.done && p.dueDate && p.dueDate <= today();
       return `<div class="plan-item${p.done ? ' done' : ''}">
@@ -1870,9 +1958,9 @@
   });
 
   document.getElementById('btn-plan-add').addEventListener('click', () => {
-    const text = document.getElementById('plan-words').value;
-    const words = parsePlanWords(text);
-    if (!words.length) { flash('请先粘贴要背的单词', 'no'); return; }
+    const words = collectPlanWords();
+    if (!words.length) { flash('请先勾选要背的单词', 'no'); return; }
+    const wordCount = planSelected.size;
     let dueDate;
     const active = document.querySelector('#plan-due-seg .seg-btn.active');
     const days = active ? active.dataset.days : '0';
@@ -1884,10 +1972,11 @@
       dueDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
     addPlan(words, dueDate);
-    document.getElementById('plan-words').value = '';
+    planSelected.clear();
+    renderPlanPicker();
     renderPlanList();
     renderPlanBanner();
-    flash('已加入待背清单 ✓（' + words.length + ' 个单词，' + dueDate + ' 到期）', 'ok');
+    flash('已加入待背清单 ✓（' + wordCount + ' 个单词，' + dueDate + ' 到期）', 'ok');
   });
 
   document.getElementById('btn-plan-banner').addEventListener('click', () => {
