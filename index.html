@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>背单词小工具</title>
 <meta name="theme-color" content="#4f6ef7">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-192.png">
+<title>背单词小工具</title>
 <style>
   :root {
     --bg: #f5f7fb;
@@ -249,6 +249,31 @@
   .blank-input.no { border-color: var(--danger); background: #fdecea; color: var(--danger); }
   .blank-answer { min-height: 18px; font-size: 12px; line-height: 18px; color: var(--danger); font-weight: 700; }
 
+  /* 模式切换（分段按钮） */
+  .seg { display: flex; gap: 6px; background: #eef1f8; padding: 4px; border-radius: 10px; flex-wrap: wrap; }
+  .seg-btn {
+    flex: 1; min-width: 0; text-align: center; padding: 8px 10px; border: none;
+    background: transparent; border-radius: 7px; cursor: pointer; font-size: 14px;
+    color: var(--muted); font-weight: 600; font-family: inherit; white-space: nowrap; transition: all .15s;
+  }
+  .seg-btn.active { background: var(--card); color: var(--primary); box-shadow: var(--shadow); }
+
+  /* 待背清单 */
+  .plan-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 4px; border-bottom: 1px solid var(--border); font-size: 14px;
+  }
+  .plan-item:last-child { border-bottom: none; }
+  .plan-item .plan-info { flex: 1; }
+  .plan-item .plan-title { font-weight: 600; }
+  .plan-item.done .plan-title { color: var(--muted); text-decoration: line-through; }
+  .plan-item .plan-due { font-size: 12px; color: var(--muted); margin-top: 3px; }
+  .plan-due.today { color: #b8860b; font-weight: 700; }
+
+  /* 挖空填词 */
+  .sentence-blanks.cloze { display: block; text-align: center; font-size: 20px; font-weight: 600; line-height: 2; padding: 16px 4px; }
+  .sentence-blanks.cloze .blank-input { font-size: 18px; margin: 0 2px; vertical-align: baseline; }
+
   /* ---------- 移动端适配 ---------- */
   @media (max-width: 520px) {
     html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
@@ -365,6 +390,45 @@
 
   <!-- 背诵测试 -->
   <div class="panel" id="panel-quiz">
+    <div class="card" id="plan-banner" style="display:none;background:#fff8e6;border:1px solid #f0dfae;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <span style="font-weight:700;color:#b8860b;">📌 今天待背 <span id="plan-banner-count">0</span> 个单词</span>
+        <button class="btn btn-primary btn-sm" id="btn-plan-banner">去背</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>测试模式</h2>
+      <div class="seg" id="quiz-mode-seg">
+        <button class="seg-btn active" data-mode="all">全部随机</button>
+        <button class="seg-btn" data-mode="date">按日期</button>
+        <button class="seg-btn" data-mode="plan">自传单词</button>
+      </div>
+    </div>
+    <div class="card" id="quiz-date-card" style="display:none;">
+      <h2>按添加日期选词</h2>
+      <div class="row">
+        <select id="added-date"></select>
+        <button class="btn btn-primary" id="btn-date-quiz">开始测试</button>
+      </div>
+      <p class="hint">选择日期，测试当天新添加/上传的单词。「旧词」= 早期没有记录日期的单词。</p>
+    </div>
+    <div class="card" id="quiz-plan-card" style="display:none;">
+      <h2>自传单词 · 待背清单</h2>
+      <textarea id="plan-words" placeholder="英文 中文 [词性]（每行一个，例如：apple 苹果 名词）"></textarea>
+      <div style="margin-top:10px;">
+        <label>背诵时间</label>
+        <div class="seg" id="plan-due-seg">
+          <button class="seg-btn active" data-days="0">今天</button>
+          <button class="seg-btn" data-days="1">明天</button>
+          <button class="seg-btn" data-days="3">3天后</button>
+          <button class="seg-btn" data-days="7">7天后</button>
+          <button class="seg-btn" data-days="custom">自定义</button>
+        </div>
+        <input type="date" id="plan-due-date" style="display:none;margin-top:8px;">
+      </div>
+      <button class="btn btn-primary btn-block" id="btn-plan-add">加入待背清单</button>
+      <div id="plan-list" style="margin-top:14px;"></div>
+    </div>
     <div class="card">
       <h2>回顾错词</h2>
       <div class="row">
@@ -373,7 +437,7 @@
       </div>
       <p class="hint" id="review-hint">选择日期，只复习当天背错的单词。</p>
     </div>
-    <div class="card">
+    <div class="card" id="quiz-pos-filter-card">
       <h2>词性筛选</h2>
       <div id="quiz-pos-filter" class="select-wrap"></div>
       <p class="hint">不勾选 = 全部词性；勾选一个或多个后，只抽对应词性的释义。</p>
@@ -430,10 +494,14 @@
   <!-- 句子测试 -->
   <div class="panel" id="panel-sentquiz">
     <div class="card">
+      <div class="seg" id="sent-mode-seg" style="margin-bottom:14px;">
+        <button class="seg-btn active" data-mode="translate">汉译英填空</button>
+        <button class="seg-btn" data-mode="cloze">挖空填词</button>
+      </div>
       <div class="quiz-progress" id="sent-progress"></div>
       <div class="sentence-zh" id="sent-zh">加载中…</div>
       <button class="btn btn-ghost btn-sm" id="btn-sent-speak" style="display:block;margin:10px auto 0;">🔊 听整句</button>
-      <p class="hint" style="text-align:center;">根据中文翻译，在空格中填入每个英文单词</p>
+      <p class="hint" id="sent-hint" style="text-align:center;">根据中文翻译，在空格中填入每个英文单词</p>
       <div class="sentence-blanks" id="sentence-blanks"></div>
       <div class="feedback" id="sent-feedback"></div>
       <div class="quiz-actions">
@@ -481,7 +549,8 @@
           meanings,
           addCount: w.addCount || 1,
           quizCount: w.quizCount || 0,
-          wrongCount: w.wrongCount || 0
+          wrongCount: w.wrongCount || 0,
+          addedDate: w.addedDate || ''
         };
       });
     }
@@ -641,7 +710,7 @@
     const key = t.dataset.panel;
     switchPanel(key);
     if (key === 'list') renderList();
-    if (key === 'quiz') { renderReviewSelect(); startQuiz(); }
+    if (key === 'quiz') { renderReviewSelect(); renderPlanBanner(); setQuizMode(quizMode); }
     if (key === 'history') renderHistory();
     if (key === 'sent') renderSentList();
     if (key === 'sentquiz') startSentenceQuiz();
@@ -670,7 +739,7 @@
       save(words);
       return { ok: true, added, dup };
     }
-    words.push({ en: e, meanings: ms, addCount: 1, quizCount: 0, wrongCount: 0 });
+    words.push({ en: e, meanings: ms, addCount: 1, quizCount: 0, wrongCount: 0, addedDate: today() });
     save(words);
     return { ok: true, added: ms.length, dup: 0 };
   }
@@ -1091,6 +1160,8 @@
   let quizChecked = false;
   let quizMode = 'all';
   let quizReviewDate = null;
+  let quizDate = null;
+  let quizPlanId = null;
 
   function startQuiz() {
     quizMode = 'all';
@@ -1141,7 +1212,11 @@
   function showCurrent() {
     quizChecked = false;
     const w = quizQueue[quizIndex];
-    document.getElementById('quiz-progress').textContent = (quizMode === 'review' ? '回顾 ' + quizReviewDate + ' · ' : '') + `第 ${quizIndex + 1} / ${quizQueue.length} 个`;
+    document.getElementById('quiz-progress').textContent =
+      (quizMode === 'review' ? '回顾 ' + quizReviewDate + ' · ' : '') +
+      (quizMode === 'date' ? '按日期 ' + (quizDate || '旧词') + ' · ' : '') +
+      (quizMode === 'plan' ? '待背清单 · ' : '') +
+      `第 ${quizIndex + 1} / ${quizQueue.length} 个`;
     document.getElementById('quiz-chinese').innerHTML = (w.pos ? `<span class="pos-badge">${escapeHtml(posLabel(w.pos))}</span> ` : '') + escapeHtml(w.zh);
     document.getElementById('quiz-input').value = '';
     document.getElementById('quiz-feedback').textContent = '';
@@ -1187,6 +1262,7 @@
       document.getElementById('quiz-input').value = '';
       document.getElementById('btn-check').textContent = '再来一轮';
       document.getElementById('btn-check').dataset.restart = '1';
+      if (quizMode === 'plan' && quizPlanId) markPlanDone(quizPlanId);
       return;
     }
     showCurrent();
@@ -1197,6 +1273,8 @@
       document.getElementById('btn-check').dataset.restart = '';
       document.getElementById('btn-check').textContent = '检查';
       if (quizMode === 'review') startReview(quizReviewDate);
+      else if (quizMode === 'date') startDateQuiz(quizDate);
+      else if (quizMode === 'plan') startPlanQuiz(quizPlanId);
       else startQuiz();
       return;
     }
@@ -1208,6 +1286,69 @@
     if (!d) { flash('请先选择日期', 'no'); return; }
     startReview(d);
   });
+
+  // ---------- 测试模式切换 + 按日期选词 ----------
+  function setQuizMode(mode) {
+    quizMode = mode;
+    document.querySelectorAll('#quiz-mode-seg .seg-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    document.getElementById('quiz-date-card').style.display = (mode === 'date') ? '' : 'none';
+    document.getElementById('quiz-plan-card').style.display = (mode === 'plan') ? '' : 'none';
+    document.getElementById('quiz-pos-filter-card').style.display = (mode === 'all') ? '' : 'none';
+    if (mode === 'date') renderAddedDateSelect();
+    if (mode === 'plan') renderPlanList();
+    if (mode === 'all') startQuiz();
+  }
+
+  document.getElementById('quiz-mode-seg').addEventListener('click', e => {
+    const btn = e.target.closest('.seg-btn');
+    if (btn) setQuizMode(btn.dataset.mode);
+  });
+
+  function renderAddedDateSelect() {
+    const words = load();
+    const sel = document.getElementById('added-date');
+    const map = {};
+    let oldCount = 0;
+    words.forEach(w => {
+      if (w.addedDate) map[w.addedDate] = (map[w.addedDate] || 0) + w.meanings.length;
+      else oldCount += w.meanings.length;
+    });
+    const dates = Object.keys(map).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+    let html = '';
+    if (oldCount) html += `<option value="">旧词（未记录日期，${oldCount} 个释义）</option>`;
+    html += dates.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}（${map[d]} 个释义）</option>`).join('');
+    sel.innerHTML = html || '<option value="">（暂无带日期的单词）</option>';
+  }
+
+  function startDateQuiz(d) {
+    const words = load();
+    const pool = [];
+    words.forEach(w => {
+      if ((d === '' && !w.addedDate) || (d !== '' && w.addedDate === d)) {
+        w.meanings.forEach(m => pool.push({ en: w.en, pos: m.pos, zh: m.zh }));
+      }
+    });
+    if (!pool.length) { flash('该日期没有单词', 'no'); return; }
+    quizMode = 'date';
+    quizDate = d;
+    quizQueue = pool.slice().sort(() => Math.random() - 0.5);
+    quizIndex = 0;
+    showCurrent();
+  }
+
+  document.getElementById('btn-date-quiz').addEventListener('click', () => {
+    startDateQuiz(document.getElementById('added-date').value);
+  });
+
+  function startPlanQuiz(planId) {
+    const plan = loadPlans().find(p => p.id === planId);
+    if (!plan || !plan.words.length) { flash('这条清单没有单词', 'no'); return; }
+    quizMode = 'plan';
+    quizPlanId = planId;
+    quizQueue = plan.words.map(w => ({ en: w.en, pos: w.pos, zh: w.zh })).sort(() => Math.random() - 0.5);
+    quizIndex = 0;
+    showCurrent();
+  }
 
   document.getElementById('btn-skip').addEventListener('click', () => {
     if (!quizQueue.length) return;
@@ -1352,6 +1493,7 @@
   function renderBlanks(sentence) {
     const wrap = document.getElementById('sentence-blanks');
     wrap.innerHTML = '';
+    wrap.classList.remove('cloze');
     tokenizeSentence(sentence.en).forEach(u => {
       if (u.type === 'text') {
         const span = document.createElement('span');
@@ -1393,10 +1535,67 @@
     if (inputs.length) inputs[0].focus();
   }
 
+  // 挖空填词：随机挖掉一个实词，保留原句其余部分，中文作为提示
+  const CLOZE_STOP = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am', 'of', 'in', 'on', 'at', 'to', 'for', 'and', 'or', 'but', 'so', 'it', 'he', 'she', 'they', 'we', 'you', 'i', 'me', 'him', 'her', 'us', 'them', 'this', 'that', 'these', 'those', 'my', 'your', 'his', 'her', 'their', 'our', 'its', 'not', 'no', 'have', 'has', 'had', 'do', 'does', 'did', 'can', 'could', 'will', 'would', 'should', 'may', 'might', 'must', 'shall', 'with', 'from', 'by', 'as', 'if', 'when', 'what', 'who', 'which', 'how', 'why', 'there', 'here', 'than', 'then', 'also', 'just', 'only', 'very', 'more', 'most', 'some', 'any', 'all', 'both', 'each', 'few', 'many', 'much', 'such', 'too', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'now', 'about', 'into']);
+  function isContentWord(w) {
+    const t = normWord(w);
+    return t.length >= 3 && !CLOZE_STOP.has(t);
+  }
+
+  function renderCloze(sentence) {
+    const wrap = document.getElementById('sentence-blanks');
+    wrap.innerHTML = '';
+    wrap.classList.add('cloze');
+    const units = tokenizeSentence(sentence.en);
+    const wordIdx = units.map((u, i) => ({ u, i })).filter(x => x.u.type === 'word');
+    const contentIdx = wordIdx.filter(x => isContentWord(x.u.word));
+    const pool = contentIdx.length ? contentIdx : wordIdx;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    const pickIdx = pick.i;
+    units.forEach((u, i) => {
+      if (u.type === 'text') {
+        wrap.appendChild(document.createTextNode(u.text + ' '));
+        return;
+      }
+      if (i === pickIdx) {
+        const blk = document.createElement('span');
+        blk.className = 'sblk';
+        const line = document.createElement('span');
+        line.className = 'sline';
+        if (u.pre) { const p = document.createElement('span'); p.className = 'pre'; p.textContent = u.pre; line.appendChild(p); }
+        const inp = document.createElement('input');
+        inp.className = 'blank-input';
+        inp.type = 'text';
+        inp.autocomplete = 'off';
+        inp.spellcheck = false;
+        inp.dataset.word = u.word;
+        inp.style.width = (Math.max(u.word.length, 2) * 0.95 + 1.4) + 'em';
+        line.appendChild(inp);
+        if (u.post) { const p = document.createElement('span'); p.className = 'post'; p.textContent = u.post; line.appendChild(p); }
+        const ans = document.createElement('span');
+        ans.className = 'blank-answer';
+        blk.appendChild(line);
+        blk.appendChild(ans);
+        wrap.appendChild(blk);
+        wrap.appendChild(document.createTextNode(' '));
+      } else {
+        wrap.appendChild(document.createTextNode(u.pre + u.word + u.post + ' '));
+      }
+    });
+    const inp = wrap.querySelector('.blank-input');
+    if (inp) {
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-sent-check').click(); }
+      });
+      inp.focus();
+    }
+  }
+
   let sentQueue = [];
   let sentIndex = 0;
   let sentenceChecked = false;
   let currentSentence = null;
+  let sentMode = 'translate';
 
   function startSentenceQuiz() {
     const arr = loadSentences();
@@ -1420,7 +1619,10 @@
     document.getElementById('sent-zh').textContent = s.zh;
     document.getElementById('sent-feedback').textContent = '';
     document.getElementById('sent-feedback').className = 'feedback';
-    renderBlanks(s);
+    document.getElementById('sent-hint').textContent = sentMode === 'cloze'
+      ? '根据中文意思，在空格中填入被挖掉的单词'
+      : '根据中文翻译，在空格中填入每个英文单词';
+    if (sentMode === 'cloze') renderCloze(s); else renderBlanks(s);
   }
 
   function recordSentenceQuiz(s, correct) {
@@ -1557,6 +1759,143 @@
     if (currentSentence) speak(currentSentence.en, 'sentence');
   });
 
+  document.getElementById('sent-mode-seg').addEventListener('click', e => {
+    const btn = e.target.closest('.seg-btn');
+    if (!btn) return;
+    sentMode = btn.dataset.mode;
+    document.querySelectorAll('#sent-mode-seg .seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+    startSentenceQuiz();
+  });
+
+  // ---------- 待背清单（自传单词 + 到期提醒） ----------
+  const PLAN_KEY = 'vocab_plans_v1';
+
+  function loadPlans() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(PLAN_KEY)) || [];
+      return arr.map(p => ({
+        id: String(p.id || ''),
+        dueDate: String(p.dueDate || ''),
+        done: !!p.done,
+        words: (p.words || []).map(w => ({ en: String(w.en || '').trim(), zh: String(w.zh || '').trim(), pos: w.pos || '' })).filter(w => w.en && w.zh),
+        createdAt: p.createdAt || ''
+      })).filter(p => p.words.length);
+    } catch (e) { return []; }
+  }
+  function savePlans(arr) { localStorage.setItem(PLAN_KEY, JSON.stringify(arr)); schedulePush(); }
+  function duePlans() { const t = today(); return loadPlans().filter(p => !p.done && p.dueDate && p.dueDate <= t); }
+
+  function daysUntil(d) {
+    const a = new Date(today() + 'T00:00:00');
+    const b = new Date(d + 'T00:00:00');
+    const diff = Math.round((b - a) / 86400000);
+    if (diff <= 0) return '今天到期';
+    if (diff === 1) return '明天到期';
+    return diff + ' 天后到期';
+  }
+
+  function parsePlanWords(text) {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    const words = [];
+    lines.forEach(line => {
+      let en, zh, pos = '';
+      const m3 = line.match(/^(.+?)[\s,，、\t]+(.+?)[\s,，、\t]+(.+)$/);
+      if (m3) {
+        const tok = m3[3].split(/[\s,，、/|]+/).map(normalizePos).filter(Boolean);
+        if (tok.length && tok.every(t => POS_LIST.includes(t))) { en = m3[1]; zh = m3[2]; pos = tok[0]; }
+        else { const m2 = line.match(/^(.+?)[\s,，、\t]+(.+)$/); if (m2) { en = m2[1]; zh = m2[2]; } }
+      } else {
+        const m2 = line.match(/^(.+?)[\s,，、\t]+(.+)$/);
+        if (m2) { en = m2[1]; zh = m2[2]; }
+      }
+      if (en && zh) words.push({ en: en.trim(), zh: zh.trim(), pos });
+    });
+    return words;
+  }
+
+  function addPlan(words, dueDate) {
+    const plans = loadPlans();
+    plans.push({ id: 'p' + Date.now(), dueDate, words, done: false, createdAt: new Date().toISOString() });
+    savePlans(plans);
+  }
+
+  function markPlanDone(id) {
+    const plans = loadPlans();
+    const p = plans.find(x => x.id === id);
+    if (p) { p.done = true; savePlans(plans); }
+    renderPlanBanner();
+    renderPlanList();
+  }
+
+  function renderPlanBanner() {
+    const due = duePlans();
+    const banner = document.getElementById('plan-banner');
+    if (!due.length) { banner.style.display = 'none'; return; }
+    document.getElementById('plan-banner-count').textContent = due.reduce((s, p) => s + p.words.length, 0);
+    banner.style.display = '';
+  }
+
+  function renderPlanList() {
+    const wrap = document.getElementById('plan-list');
+    const plans = loadPlans().slice().sort((a, b) => (a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0));
+    if (!plans.length) { wrap.innerHTML = '<p class="hint">还没有待背清单，粘贴单词并选个时间加入。</p>'; return; }
+    wrap.innerHTML = plans.map(p => {
+      const due = !p.done && p.dueDate && p.dueDate <= today();
+      return `<div class="plan-item${p.done ? ' done' : ''}">
+        <div class="plan-info">
+          <div class="plan-title">${p.words.length} 个单词${p.done ? '（已背）' : ''}</div>
+          <div class="plan-due ${due ? 'today' : ''}">${p.dueDate}${p.done ? '' : ' · ' + daysUntil(p.dueDate)}</div>
+        </div>
+        <div style="flex-shrink:0;white-space:nowrap;">
+          <button class="btn ${p.done ? 'btn-ghost' : 'btn-primary'} btn-sm plan-start" data-id="${p.id}">${p.done ? '再背一次' : '开始背诵'}</button>
+          <button class="btn btn-ghost btn-sm plan-del" data-id="${p.id}">删除</button>
+        </div>
+      </div>`;
+    }).join('');
+    wrap.querySelectorAll('.plan-start').forEach(b => b.addEventListener('click', () => startPlanQuiz(b.dataset.id)));
+    wrap.querySelectorAll('.plan-del').forEach(b => b.addEventListener('click', () => {
+      if (!confirm('删除这条待背清单？')) return;
+      savePlans(loadPlans().filter(p => p.id !== b.dataset.id));
+      renderPlanList(); renderPlanBanner();
+    }));
+  }
+
+  document.getElementById('plan-due-seg').addEventListener('click', e => {
+    const btn = e.target.closest('.seg-btn');
+    if (!btn) return;
+    document.querySelectorAll('#plan-due-seg .seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+    const custom = btn.dataset.days === 'custom';
+    document.getElementById('plan-due-date').style.display = custom ? '' : 'none';
+    if (!custom) document.getElementById('plan-due-date').value = '';
+  });
+
+  document.getElementById('btn-plan-add').addEventListener('click', () => {
+    const text = document.getElementById('plan-words').value;
+    const words = parsePlanWords(text);
+    if (!words.length) { flash('请先粘贴要背的单词', 'no'); return; }
+    let dueDate;
+    const active = document.querySelector('#plan-due-seg .seg-btn.active');
+    const days = active ? active.dataset.days : '0';
+    if (days === 'custom') {
+      dueDate = document.getElementById('plan-due-date').value;
+      if (!dueDate) { flash('请选择自定义日期', 'no'); return; }
+    } else {
+      const d = new Date(Date.now() + Number(days) * 86400000);
+      dueDate = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    addPlan(words, dueDate);
+    document.getElementById('plan-words').value = '';
+    renderPlanList();
+    renderPlanBanner();
+    flash('已加入待背清单 ✓（' + words.length + ' 个单词，' + dueDate + ' 到期）', 'ok');
+  });
+
+  document.getElementById('btn-plan-banner').addEventListener('click', () => {
+    setQuizMode('plan');
+    const due = duePlans();
+    if (due.length) startPlanQuiz(due[0].id);
+  });
+
   // ---------- 云同步（Supabase） ----------
   const SUPABASE_URL = 'https://usgegfzksymzeoyxtrps.supabase.co';
   const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzZ2VnZnprc3ltemVveXh0cnBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM2MTU1OTMsImV4cCI6MjEwOTE5MTU5M30.hMo-YFxZ34N8IHDLjpYOmqH3hgyJGuQDPiExl-SqfNY';
@@ -1576,7 +1915,8 @@
     return {
       words: JSON.parse(localStorage.getItem(KEY) || '[]'),
       daily: JSON.parse(localStorage.getItem(DAILY_KEY) || '{}'),
-      sentences: JSON.parse(localStorage.getItem(SENT_KEY) || '[]')
+      sentences: JSON.parse(localStorage.getItem(SENT_KEY) || '[]'),
+      plans: JSON.parse(localStorage.getItem(PLAN_KEY) || '[]')
     };
   }
 
@@ -1621,6 +1961,7 @@
       const d = row.data || {};
       localStorage.setItem(KEY, JSON.stringify(d.words || []));
       localStorage.setItem(SENT_KEY, JSON.stringify(d.sentences || []));
+      localStorage.setItem(PLAN_KEY, JSON.stringify(d.plans || []));
       const mergedDaily = Object.assign({}, JSON.parse(localStorage.getItem(DAILY_KEY) || '{}'), d.daily || {});
       localStorage.setItem(DAILY_KEY, JSON.stringify(mergedDaily));
       localStorage.setItem(META_KEY, String(cloudAt));
@@ -1642,7 +1983,7 @@
     if (el) el.textContent = '☁️ ' + t;
   }
   function renderAll() {
-    renderStats(); renderList(); renderHistory(); renderSentList();
+    renderStats(); renderList(); renderHistory(); renderSentList(); renderPlanBanner();
   }
 
   document.getElementById('btn-sync').addEventListener('click', () => {
@@ -1670,6 +2011,10 @@
   renderMeaningBoxes();
   renderStats();
   renderReviewSelect();
+  renderPlanBanner();
+  if (duePlans().length) {
+    flash('📌 今天有 ' + duePlans().reduce((s, p) => s + p.words.length, 0) + ' 个单词待背，去「背诵测试」看看吧', 'ok');
+  }
 })();
 </script>
 <script>
