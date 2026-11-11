@@ -431,7 +431,7 @@
         <select id="added-date"></select>
         <button class="btn btn-primary" id="btn-date-quiz">开始测试</button>
       </div>
-      <p class="hint">选择日期，测试当天新添加/上传的单词。「旧词」= 早期没有记录日期的单词。</p>
+      <p class="hint">选择日期，测试当天新添加/上传的单词（仅显示今天及之后的日期）。</p>
     </div>
     <div class="card" id="quiz-plan-card" style="display:none;">
       <h2>自选单词 · 待背清单</h2>
@@ -1341,16 +1341,13 @@
   function renderAddedDateSelect() {
     const words = load();
     const sel = document.getElementById('added-date');
+    const t = today();
     const map = {};
-    let oldCount = 0;
     words.forEach(w => {
-      if (w.addedDate) map[w.addedDate] = (map[w.addedDate] || 0) + w.meanings.length;
-      else oldCount += w.meanings.length;
+      if (w.addedDate && w.addedDate >= t) map[w.addedDate] = (map[w.addedDate] || 0) + w.meanings.length;
     });
     const dates = Object.keys(map).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
-    let html = '';
-    if (oldCount) html += `<option value="">旧词（未记录日期，${oldCount} 个释义）</option>`;
-    html += dates.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}（${map[d]} 个释义）</option>`).join('');
+    const html = dates.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}（${map[d]} 个释义）</option>`).join('');
     sel.innerHTML = html || '<option value="">（暂无带日期的单词）</option>';
   }
 
@@ -1383,7 +1380,7 @@
     const words = load();
     const pool = [];
     words.forEach(w => {
-      if ((d === '' && !w.addedDate) || (d !== '' && w.addedDate === d)) {
+      if (d !== '' && w.addedDate === d) {
         w.meanings.forEach(m => pool.push({ en: w.en, pos: m.pos, zh: m.zh }));
       }
     });
