@@ -431,7 +431,7 @@
         <select id="added-date"></select>
         <button class="btn btn-primary" id="btn-date-quiz">开始测试</button>
       </div>
-      <p class="hint">选择日期，测试当天新添加/上传的单词（仅显示今天及之后的日期）。</p>
+      <p class="hint">选择日期，测试当天新添加/上传的单词（仅显示 2026-11-11 及之后的日期）。</p>
     </div>
     <div class="card" id="quiz-plan-card" style="display:none;">
       <h2>自选单词 · 待背清单</h2>
@@ -565,7 +565,7 @@
         let meanings;
         if (Array.isArray(w.meanings) && w.meanings.length) {
           meanings = w.meanings
-            .map(m => ({ pos: normalizePos(m.pos), zh: String(m.zh || '').trim() }))
+            .map(m => ({ pos: normalizePos(m.pos), zh: String(m.zh || '').trim(), dates: Array.isArray(m.dates) ? m.dates : [] }))
             .filter(m => m.zh);
         } else {
           // 兼容旧数据：pos（字符串或数组）+ zh（字符串）
@@ -755,23 +755,27 @@
     const words = load();
     const e = normalize(en);
     if (!e) return { ok: false, msg: '英文不能为空' };
+    const t = today();
     const ms = meanings
-      .map(m => ({ pos: normalizePos(m.pos), zh: String(m.zh || '').trim() }))
+      .map(m => ({ pos: normalizePos(m.pos), zh: String(m.zh || '').trim(), dates: [t] }))
       .filter(m => m.zh);
     if (!ms.length) return { ok: false, msg: '请至少填写一个中文释义' };
     const exist = words.find(w => normalize(w.en) === e);
     if (exist) {
       let added = 0, dup = 0;
       ms.forEach(m => {
-        const found = exist.meanings.some(x => x.pos === m.pos && x.zh === m.zh);
-        if (found) { dup++; exist.addCount = (exist.addCount || 0) + 1; }
-        else { exist.meanings.push(m); added++; }
+        const found = exist.meanings.find(x => x.pos === m.pos && x.zh === m.zh);
+        if (found) {
+          dup++;
+          exist.addCount = (exist.addCount || 0) + 1;
+          if (!found.dates.includes(t)) found.dates.push(t);
+        } else { exist.meanings.push(m); added++; }
       });
-      if (added > 0) exist.addedDate = today();
+      if (added > 0) exist.addedDate = t;
       save(words);
       return { ok: true, added, dup };
     }
-    words.push({ en: e, meanings: ms, addCount: 1, quizCount: 0, wrongCount: 0, addedDate: today() });
+    words.push({ en: e, meanings: ms, addCount: 1, quizCount: 0, wrongCount: 0, addedDate: t });
     save(words);
     return { ok: true, added: ms.length, dup: 0 };
   }
@@ -1246,7 +1250,7 @@
     const w = quizQueue[quizIndex];
     document.getElementById('quiz-progress').textContent =
       (quizMode === 'review' ? '回顾 ' + quizReviewDate + ' · ' : '') +
-      (quizMode === 'date' ? '按日期 ' + (quizDate || '旧词') + ' · ' : '') +
+      (quizMode === 'date' ? '按日期 ' + quizDate + ' · ' : '') +
       (quizMode === 'plan' ? '待背清单 · ' : '') +
       `第 ${quizIndex + 1} / ${quizQueue.length} 个`;
     document.getElementById('quiz-chinese').innerHTML = (w.pos ? `<span class="pos-badge">${escapeHtml(posLabel(w.pos))}</span> ` : '') + escapeHtml(w.zh);
@@ -1341,10 +1345,14 @@
   function renderAddedDateSelect() {
     const words = load();
     const sel = document.getElementById('added-date');
-    const t = today();
+    const t = '2026-11-11'; // 「按日期」起始日：只显示这天及之后录入过的释义（11 号重置，之前旧词不显示）
     const map = {};
     words.forEach(w => {
-      if (w.addedDate && w.addedDate >= t) map[w.addedDate] = (map[w.addedDate] || 0) + w.meanings.length;
+      w.meanings.forEach(m => {
+        (m.dates || []).forEach(d => {
+          if (d && d >= t) map[d] = (map[d] || 0) + 1;
+        });
+      });
     });
     const dates = Object.keys(map).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
     const html = dates.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}（${map[d]} 个释义）</option>`).join('');
@@ -1365,13 +1373,11 @@
     });
     let changed = 0;
     words.forEach(w => {
-      if (w.addedDate) return;
-      let earliest = '';
       w.meanings.forEach(m => {
-        const d = firstSeen[wkey(w.en, m.zh)];
-        if (d && (!earliest || d < earliest)) earliest = d;
+        if (Array.isArray(m.dates) && m.dates.length) return;
+        const d = w.addedDate || firstSeen[wkey(w.en, m.zh)] || '';
+        if (d) { m.dates = [d]; changed++; }
       });
-      if (earliest) { w.addedDate = earliest; changed++; }
     });
     if (changed) save(words);
   }
@@ -1380,9 +1386,9 @@
     const words = load();
     const pool = [];
     words.forEach(w => {
-      if (d !== '' && w.addedDate === d) {
-        w.meanings.forEach(m => pool.push({ en: w.en, pos: m.pos, zh: m.zh }));
-      }
+      w.meanings.forEach(m => {
+        if (d !== '' && (m.dates || []).includes(d)) pool.push({ en: w.en, pos: m.pos, zh: m.zh });
+      });
     });
     if (!pool.length) { flash('该日期没有单词', 'no'); return; }
     quizMode = 'date';
