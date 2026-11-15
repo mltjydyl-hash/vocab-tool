@@ -489,9 +489,24 @@
   <!-- 日期记录 -->
   <div class="panel" id="panel-history">
     <div class="card">
-      <h2>每日背诵记录</h2>
-      <p class="hint">按日期查看当天背了哪些单词、哪些背错了，可一键回顾当天错词。</p>
-      <div id="history-wrap"></div>
+      <div class="seg" id="history-view-seg" style="margin-bottom:16px;">
+        <button class="seg-btn active" data-view="recorded">📥 录入的单词</button>
+        <button class="seg-btn" data-view="daily">📅 背诵记录</button>
+      </div>
+      <div id="history-recorded-view">
+        <h2>按日期查看录入的单词</h2>
+        <div class="row">
+          <select id="recorded-date"></select>
+          <button class="btn btn-primary" id="btn-recorded-show">查看</button>
+        </div>
+        <p class="hint">选择日期，查看当天录入/上传的单词（按每个释义的录入日期统计）。</p>
+        <div id="recorded-list" style="margin-top:12px;"></div>
+      </div>
+      <div id="history-daily-view" style="display:none;">
+        <h2>每日背诵记录</h2>
+        <p class="hint">按日期查看当天背了哪些单词、哪些背错了，可一键回顾当天错词。</p>
+        <div id="history-wrap"></div>
+      </div>
     </div>
   </div>
 
@@ -742,7 +757,7 @@
     switchPanel(key);
     if (key === 'list') renderList();
     if (key === 'quiz') { renderReviewSelect(); renderPlanBanner(); setQuizMode(quizMode); }
-    if (key === 'history') renderHistory();
+    if (key === 'history') { renderHistory(); renderRecordedDateSelect(); }
     if (key === 'sent') renderSentList();
     if (key === 'sentquiz') startSentenceQuiz();
   }));
@@ -1146,6 +1161,61 @@
       btn.addEventListener('click', () => exportDayWrong(btn.dataset.date));
     });
   }
+
+  // ---------- 按日期查看录入的单词 ----------
+  function renderRecordedDateSelect() {
+    const words = load();
+    const sel = document.getElementById('recorded-date');
+    const map = {};
+    words.forEach(w => {
+      w.meanings.forEach(m => {
+        (m.dates || []).forEach(d => { if (d) map[d] = (map[d] || 0) + 1; });
+      });
+    });
+    const dates = Object.keys(map).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+    const prev = sel.value;
+    sel.innerHTML = dates.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}（${map[d]} 个释义）</option>`).join('')
+      || '<option value="">（暂无带日期的单词）</option>';
+    if (prev && dates.includes(prev)) sel.value = prev;
+    renderRecordedList(sel.value);
+  }
+
+  function renderRecordedList(d) {
+    const wrap = document.getElementById('recorded-list');
+    if (!d) { wrap.innerHTML = ''; return; }
+    const words = load();
+    const rows = [];
+    words.forEach(w => {
+      w.meanings.forEach(m => {
+        if ((m.dates || []).includes(d)) rows.push({ en: w.en, pos: m.pos, zh: m.zh });
+      });
+    });
+    if (!rows.length) { wrap.innerHTML = '<div class="empty">该日期没有录入的单词</div>'; return; }
+    wrap.innerHTML =
+      '<div class="history-stats" style="margin-bottom:8px;">共 ' + rows.length + ' 个释义</div>' +
+      '<ul class="history-words">' + rows.map(r => `
+        <li class="history-word">
+          <div class="word-main">
+            <div class="word-en">${wordWithSpeak(r.en)}</div>
+            <div class="word-zh">${(r.pos ? `<span class="pos-badge">${escapeHtml(posLabel(r.pos))}</span> ` : '') + escapeHtml(r.zh)}</div>
+          </div>
+        </li>`).join('') + '</ul>';
+  }
+
+  document.getElementById('btn-recorded-show').addEventListener('click', () => {
+    renderRecordedList(document.getElementById('recorded-date').value);
+  });
+  document.getElementById('recorded-date').addEventListener('change', e => {
+    renderRecordedList(e.target.value);
+  });
+  document.getElementById('history-view-seg').addEventListener('click', e => {
+    const btn = e.target.closest('.seg-btn');
+    if (!btn) return;
+    document.querySelectorAll('#history-view-seg .seg-btn').forEach(b => b.classList.toggle('active', b === btn));
+    const view = btn.dataset.view;
+    document.getElementById('history-recorded-view').style.display = (view === 'recorded') ? '' : 'none';
+    document.getElementById('history-daily-view').style.display = (view === 'daily') ? '' : 'none';
+  });
 
   function renderReviewSelect() {
     const daily = loadDaily();
